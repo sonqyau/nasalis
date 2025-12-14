@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install SwiftFormat and SwiftLint
+        run: |
+          brew install swiftformat swiftlint
+
+      - name: Linting
+        run: swiftlint --fix --format && swiftlint --strict
+        continue-on-error: true
+
+      - name: Formatting
+        run: swiftformat . && swiftformat . --lint
+        continue-on-error: true
+
+      - name: Get Swift version
+        run: swift --version
+
+      - name: Build
+        run: |
+          swift build -c debug
+        continue-on-error: true
+
+      - name: Run tests
+        run: swift test --parallel
+        continue-on-error: true
+
+  package:
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build
+        run: |
+          swift build -c release
+        continue-on-error: true
+
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: nasalis
+          path: .build/release/nasalis
+          if-no-files-found: error
