@@ -15,7 +15,7 @@ final class MainViewModel: ViewModelProtocol {
     init(
         store: Store<AppState, AppAction>,
         telemetryService: TelemetryServiceProtocol = TelemetryService(),
-        ) {
+    ) {
         self.store = store
         self.telemetryService = telemetryService
         input = BatteryInput()

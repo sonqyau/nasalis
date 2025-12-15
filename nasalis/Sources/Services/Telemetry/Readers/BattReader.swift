@@ -378,22 +378,22 @@ struct BattTelemetryResponse: Decodable, Sendable {
 
 struct BattPowerTelemetry: Decodable, Sendable {
     struct Adapter: Decodable, Sendable {
-        var InputVoltage: Double?
-        var InputAmperage: Double?
+        var inputVoltage: Double?
+        var inputAmperage: Double?
     }
 
     struct Battery: Decodable, Sendable {
-        var CycleCount: Int?
+        var cycleCount: Int?
     }
 
     struct Calculations: Decodable, Sendable {
         var ACPower: Double?
-        var BatteryPower: Double?
-        var SystemPower: Double?
-        var HealthByMaxCapacity: Int?
+        var batteryPower: Double?
+        var systemPower: Double?
+        var healthByMaxCapacity: Int?
     }
 
-    var Adapter: Adapter
-    var Battery: Battery
-    var Calculations: Calculations
+    var adapter: Adapter
+    var battery: Battery
+    var calculations: Calculations
 }

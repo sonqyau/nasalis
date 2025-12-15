@@ -2,10 +2,10 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var AppComposition: AppComposition?
+    private var appComposition: AppComposition?
 
     func applicationDidFinishLaunching(_: Notification) {
         SMCReader.invalidateCache()
-        AppComposition = NasalisApp.AppComposition()
+        appComposition = NasalisApp.AppComposition()
     }
 }

@@ -61,7 +61,7 @@ private struct PowerFlowView: View {
             batteryPowerW: telemetry.batteryPowerW,
             systemLoadW: telemetry.systemLoadW,
             isCharging: telemetry.isCharging,
-            )
+        )
     }
 }
 

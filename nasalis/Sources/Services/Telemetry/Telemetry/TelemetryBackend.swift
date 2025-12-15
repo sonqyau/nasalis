@@ -5,8 +5,8 @@ enum TelemetryBackend: String, Sendable {
 
     static let userDefaultsKey = "nasalis.telemetry.backend"
 
-    static func current() -> TelemetryBackend {
-        let raw = UserDefaults.standard.string(forKey: userDefaultsKey) ?? TelemetryBackend.smcBridge.rawValue
-        return TelemetryBackend(rawValue: raw) ?? .smcBridge
+    static func current() -> Self {
+        let raw = UserDefaults.standard.string(forKey: userDefaultsKey) ?? Self.smcBridge.rawValue
+        return Self(rawValue: raw) ?? .smcBridge
     }
 }

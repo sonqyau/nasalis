@@ -18,7 +18,7 @@ struct SMCReader: Sendable {
             batteryPowerW: doubleOrNil(data.batteryPowerW),
             batteryTemperatureC: temperatureOrNil(data.batteryTemperatureC),
             batteryCycleCount: intOrNil(data.batteryCycleCount),
-            )
+        )
     }
 
     static func invalidateCache() {
@@ -56,10 +56,17 @@ struct EmbeddedSMCSnapshot: Sendable {
     var batteryTemperatureC: Double?
     var batteryCycleCount: Int?
 
-    init(systemLoadW: Double? = nil, adapterPowerW: Double? = nil, adapterVoltageV: Double? = nil,
-         adapterAmperageA: Double? = nil, batteryVoltageV: Double? = nil, batteryAmperageA: Double? = nil,
-         batteryPowerW: Double? = nil, batteryTemperatureC: Double? = nil, batteryCycleCount: Int? = nil)
-    {
+    init(
+        systemLoadW: Double? = nil,
+        adapterPowerW: Double? = nil,
+        adapterVoltageV: Double? = nil,
+        adapterAmperageA: Double? = nil,
+        batteryVoltageV: Double? = nil,
+        batteryAmperageA: Double? = nil,
+        batteryPowerW: Double? = nil,
+        batteryTemperatureC: Double? = nil,
+        batteryCycleCount: Int? = nil,
+    ) {
         self.systemLoadW = systemLoadW
         self.adapterPowerW = adapterPowerW
         self.adapterVoltageV = adapterVoltageV

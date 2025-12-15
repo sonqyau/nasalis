@@ -8,12 +8,12 @@ final class AppComposition {
     private var statusHostingView: NSHostingView<StatusView>?
 
     private let store: Store<AppState, AppAction>
-    private let MainViewModel: MainViewModel
+    private let mainViewModel: MainViewModel
 
     init() {
         store = Store(initialState: AppState(), reducer: appReducer)
 
-        MainViewModel = NasalisApp.MainViewModel(store: store)
+        mainViewModel = NasalisApp.MainViewModel(store: store)
 
         setupStatusBar()
         setupPopover()
@@ -25,7 +25,7 @@ final class AppComposition {
 
         guard let button = statusItem.button else { return }
 
-        let statusView = StatusView(viewModel: MainViewModel)
+        let statusView = StatusView(viewModel: mainViewModel)
         let hostingView = NSHostingView(rootView: statusView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -52,7 +52,7 @@ final class AppComposition {
         popover.behavior = .transient
         popover.animates = true
 
-        let detailView = MainView(viewModel: MainViewModel)
+        let detailView = MainView(viewModel: mainViewModel)
         let hostingController = NSHostingController(rootView: detailView)
         hostingController.view.frame = NSRect(x: 0, y: 0, width: 360, height: 520)
 

@@ -4,7 +4,7 @@ import IOKit.ps
 enum IOKitReader {
     struct BatterySummary: Sendable {
         var batteryPercent: Int?
-        var isCharging: Bool?
+        var isCharging: Bool
     }
 
     static func readBatterySummary() async -> BatterySummary {
@@ -16,11 +16,11 @@ enum IOKitReader {
 
     private static func readBatterySummarySync() -> BatterySummary {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
-            return BatterySummary(batteryPercent: nil, isCharging: nil)
+            return BatterySummary(batteryPercent: nil, isCharging: false)
         }
 
         guard let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef] else {
-            return BatterySummary(batteryPercent: nil, isCharging: nil)
+            return BatterySummary(batteryPercent: nil, isCharging: false)
         }
 
         for ps in sources {
@@ -43,11 +43,11 @@ enum IOKitReader {
                 description[kIOPSCurrentCapacityKey as String] as? Int
             }
 
-            let isCharging = description[kIOPSIsChargingKey as String] as? Bool
+            let isCharging = description[kIOPSIsChargingKey as String] as? Bool ?? false
 
             return BatterySummary(batteryPercent: percent, isCharging: isCharging)
         }
 
-        return BatterySummary(batteryPercent: nil, isCharging: nil)
+        return BatterySummary(batteryPercent: nil, isCharging: false)
     }
 }

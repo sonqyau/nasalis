@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WidthPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat { 0 }
+
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
@@ -11,7 +12,7 @@ struct PowerView: View {
     let adapterPowerW: Double?
     let batteryPowerW: Double?
     let systemLoadW: Double?
-    let isCharging: Bool?
+    let isCharging: Bool
 
     private let iconSize: CGFloat = 16
     private let flowHeight: CGFloat = 40
@@ -171,15 +172,15 @@ struct PowerView: View {
                         GeometryReader { geometry in
                             Color.clear.preference(key: WidthPreferenceKey.self, value: geometry.size.width)
                         },
-                        )
+                    )
                 Rectangle()
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [Color.clear, animateFlowColor]),
                             startPoint: .leading,
                             endPoint: .trailing,
-                            ),
-                        )
+                        ),
+                    )
                     .blur(radius: 1.5)
                     .frame(width: animateFlowWidth, height: height)
             }
@@ -201,8 +202,8 @@ struct PowerView: View {
                             gradient: Gradient(colors: [Color.clear, animateFlowColor]),
                             startPoint: .leading,
                             endPoint: .trailing,
-                            ),
-                        )
+                        ),
+                    )
                     .blur(radius: 1.5)
                     .frame(width: animateFlowWidth, height: height)
                     .clipShape(flowShape(width: middleSectionWidth, height: height, startLength: startLength, endLength: endLength, direction: direction))
@@ -329,7 +330,7 @@ func flowShape(width: CGFloat, height: CGFloat, startLength: CGFloat, endLength:
     var path = Path()
 
     if direction == 0 {
-        path.move(to: CGPoint(x: 0, y: 0))
+        path.move(to: CGPoint.zero)
         let c1 = CGPoint(x: width * 0.3, y: 0)
         let c2 = CGPoint(x: width * 0.7, y: height - endLength)
         path.addCurve(to: CGPoint(x: width, y: height - endLength), control1: c1, control2: c2)

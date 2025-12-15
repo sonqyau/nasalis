@@ -1,17 +1,15 @@
 import Foundation
 
 enum Readers {
-    static func readBatteryPercentAndCharging() async -> (Int?, Bool?) {
+    static func readBatteryPercentAndCharging() async -> (Int?, Bool) {
         let output = await runProcess("/usr/bin/pmset", ["-g", "batt"], timeoutSeconds: 1.0) ?? ""
 
         let percent = parsePercent(output)
 
-        let charging: Bool? = if output.localizedCaseInsensitiveContains("charging") {
+        let charging = if output.localizedCaseInsensitiveContains("charging") {
             true
-        } else if output.localizedCaseInsensitiveContains("discharging") {
-            false
         } else {
-            nil
+            false
         }
 
         return (percent, charging)
@@ -37,7 +35,7 @@ enum Readers {
                 "AppleSmartBattery",
             ],
             timeoutSeconds: 1.0,
-            ) ?? ""
+        ) ?? ""
 
         let designCapacity = parseKeyInt(output, key: "\"DesignCapacity\"")
         let maxCapacity = parseKeyInt(output, key: "\"AppleRawMaxCapacity\"")
@@ -46,12 +44,12 @@ enum Readers {
 
         let voltage_mV =
             parseKeyInt(output, key: "\"Voltage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
 
         let amperage_mA =
             parseKeyInt(output, key: "\"InstantAmperage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
 
         let serialNumber = parseKeyQuotedString(output, key: "\"Serial\"")
 
@@ -88,7 +86,7 @@ enum Readers {
             batteryVoltageV: batteryVoltageV,
             batteryAmperageA: batteryAmperageA,
             batteryPowerW: batteryPowerW,
-            )
+        )
     }
 
     private static func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds: TimeInterval) async -> String? {
@@ -211,7 +209,8 @@ enum Readers {
     private static func parseKeyInt(_ s: String, key: String, allowSign: Bool = false) -> Int? {
         guard let keyRange = s.range(of: key) else { return nil }
         let tail = s[keyRange.upperBound...]
-        return tail.utf8.withContiguousStorageIfAvailable { bytes -> Int? in
+
+        let result = tail.utf8.withContiguousStorageIfAvailable { bytes in
             var i = 0
             let n = bytes.count
             while i < n {
@@ -235,8 +234,13 @@ enum Readers {
                 v = v &* 10 &+ d
                 i &+= 1
             }
-            return any ? v * sign : nil
-        } ?? nil
+            return any ? (v * sign, true) : (0, false)
+        }
+
+        if let (value, success) = result, success {
+            return value
+        }
+        return nil
     }
 
     private static func parseKeyQuotedString(_ s: String, key: String) -> String? {

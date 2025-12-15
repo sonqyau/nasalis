@@ -24,7 +24,7 @@ struct TelemetryClient: Sendable {
                 adapterPowerW: smc.adapterPowerW,
                 systemLoadW: smc.systemLoadW,
                 batteryPowerW: smc.batteryPowerW,
-                )
+            )
 
             let smcHasAny =
                 snapshot.batteryVoltageV != nil || snapshot.batteryAmperageA != nil || snapshot.batteryPowerW != nil ||
