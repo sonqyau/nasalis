@@ -24,7 +24,7 @@ struct TelemetryClient: Sendable {
                 adapterPowerW: smc.adapterPowerW,
                 systemLoadW: smc.systemLoadW,
                 batteryPowerW: smc.batteryPowerW,
-            )
+                )
 
             let smcHasAny =
                 snapshot.batteryVoltageV != nil || snapshot.batteryAmperageA != nil || snapshot.batteryPowerW != nil ||
@@ -48,13 +48,13 @@ struct TelemetryClient: Sendable {
                 snapshot.chargeLimitPercent = limitPercent
                 snapshot.isCharging = snapshot.isCharging ?? isCharging
                 snapshot.batteryPercent = snapshot.batteryPercent ?? percent
-                snapshot.cycleCount = snapshot.cycleCount ?? p?.Battery.CycleCount
+                snapshot.cycleCount = snapshot.cycleCount ?? p?.battery.cycleCount
 
-                snapshot.adapterVoltageV = snapshot.adapterVoltageV ?? p?.Adapter.InputVoltage
-                snapshot.adapterAmperageA = snapshot.adapterAmperageA ?? p?.Adapter.InputAmperage
-                snapshot.adapterPowerW = snapshot.adapterPowerW ?? p?.Calculations.ACPower
-                snapshot.systemLoadW = snapshot.systemLoadW ?? p?.Calculations.SystemPower
-                snapshot.batteryPowerW = snapshot.batteryPowerW ?? p?.Calculations.BatteryPower
+                snapshot.adapterVoltageV = snapshot.adapterVoltageV ?? p?.adapter.inputVoltage
+                snapshot.adapterAmperageA = snapshot.adapterAmperageA ?? p?.adapter.inputAmperage
+                snapshot.adapterPowerW = snapshot.adapterPowerW ?? p?.calculations.ACPower
+                snapshot.systemLoadW = snapshot.systemLoadW ?? p?.calculations.systemPower
+                snapshot.batteryPowerW = snapshot.batteryPowerW ?? p?.calculations.batteryPower
             } catch {
                 if !smcHasAny {
                     snapshot.telemetryError = "SMC and batt telemetry unavailable: \(BattReader.humanReadable(error: error))"
@@ -71,7 +71,7 @@ struct TelemetryClient: Sendable {
                 snapshot.isCharging == nil
 
             if needsLegacy {
-                async let legacyDetails = Readers.readBatteryDetails()
+                async let legacyDetails = ShellReader.readBatteryDetails()
                 async let iokitSummary = IOKitReader.readBatterySummary()
 
                 let d = await legacyDetails

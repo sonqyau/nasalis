@@ -16,7 +16,8 @@ struct TelemetrySnapshot: Sendable, Equatable {
     var chargeLimitPercent: Int?
 
     var batteryPercent: Int?
-    var isCharging: Bool
+    // swiftlint:disable:next discouraged_optional_boolean
+    var isCharging: Bool?
 
     var designCapacity_mAh: Int?
     var maxCapacity_mAh: Int?
@@ -39,7 +40,7 @@ struct TelemetrySnapshot: Sendable, Equatable {
         telemetryError: nil,
         chargeLimitPercent: nil,
         batteryPercent: nil,
-        isCharging: false,
+        isCharging: nil,
         designCapacity_mAh: nil,
         maxCapacity_mAh: nil,
         cycleCount: nil,
@@ -52,5 +53,5 @@ struct TelemetrySnapshot: Sendable, Equatable {
         adapterPowerW: nil,
         systemLoadW: nil,
         batteryPowerW: nil,
-    )
+        )
 }

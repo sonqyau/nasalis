@@ -2,13 +2,13 @@ import Foundation
 import SMCBridge
 
 struct SMCReader: Sendable {
-    func readTelemetry() -> EmbeddedSMCSnapshot {
+    func readTelemetry() -> SMCSnapshot {
         var data = SMCBridgeData()
         guard SMCBridgeReadAll(&data) else {
-            return EmbeddedSMCSnapshot()
+            return SMCSnapshot()
         }
 
-        return EmbeddedSMCSnapshot(
+        return SMCSnapshot(
             systemLoadW: doubleOrNil(data.systemPowerW),
             adapterPowerW: doubleOrNil(data.adapterPowerW),
             adapterVoltageV: doubleOrNil(data.adapterVoltageV),
@@ -18,7 +18,7 @@ struct SMCReader: Sendable {
             batteryPowerW: doubleOrNil(data.batteryPowerW),
             batteryTemperatureC: temperatureOrNil(data.batteryTemperatureC),
             batteryCycleCount: intOrNil(data.batteryCycleCount),
-        )
+            )
     }
 
     static func invalidateCache() {
@@ -45,7 +45,7 @@ struct SMCReader: Sendable {
     }
 }
 
-struct EmbeddedSMCSnapshot: Sendable {
+struct SMCSnapshot: Sendable {
     var systemLoadW: Double?
     var adapterPowerW: Double?
     var adapterVoltageV: Double?
@@ -66,7 +66,7 @@ struct EmbeddedSMCSnapshot: Sendable {
         batteryPowerW: Double? = nil,
         batteryTemperatureC: Double? = nil,
         batteryCycleCount: Int? = nil,
-    ) {
+        ) {
         self.systemLoadW = systemLoadW
         self.adapterPowerW = adapterPowerW
         self.adapterVoltageV = adapterVoltageV

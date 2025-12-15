@@ -60,8 +60,8 @@ private struct PowerFlowView: View {
             adapterPowerW: telemetry.adapterPowerW,
             batteryPowerW: telemetry.batteryPowerW,
             systemLoadW: telemetry.systemLoadW,
-            isCharging: telemetry.isCharging,
-        )
+            isCharging: telemetry.isCharging ?? false,
+            )
     }
 }
 

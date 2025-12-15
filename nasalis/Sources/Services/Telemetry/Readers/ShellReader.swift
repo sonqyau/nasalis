@@ -1,6 +1,6 @@
 import Foundation
 
-enum Readers {
+enum ShellReader {
     static func readBatteryPercentAndCharging() async -> (Int?, Bool) {
         let output = await runProcess("/usr/bin/pmset", ["-g", "batt"], timeoutSeconds: 1.0) ?? ""
 
@@ -35,7 +35,7 @@ enum Readers {
                 "AppleSmartBattery",
             ],
             timeoutSeconds: 1.0,
-        ) ?? ""
+            ) ?? ""
 
         let designCapacity = parseKeyInt(output, key: "\"DesignCapacity\"")
         let maxCapacity = parseKeyInt(output, key: "\"AppleRawMaxCapacity\"")
@@ -44,12 +44,12 @@ enum Readers {
 
         let voltage_mV =
             parseKeyInt(output, key: "\"Voltage\"", allowSign: true)
-                ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
+            ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
 
         let amperage_mA =
             parseKeyInt(output, key: "\"InstantAmperage\"", allowSign: true)
-                ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
-                ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
+            ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
+            ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
 
         let serialNumber = parseKeyQuotedString(output, key: "\"Serial\"")
 
@@ -86,7 +86,7 @@ enum Readers {
             batteryVoltageV: batteryVoltageV,
             batteryAmperageA: batteryAmperageA,
             batteryPowerW: batteryPowerW,
-        )
+            )
     }
 
     private static func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds: TimeInterval) async -> String? {

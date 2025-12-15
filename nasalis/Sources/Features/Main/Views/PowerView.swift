@@ -172,15 +172,15 @@ struct PowerView: View {
                         GeometryReader { geometry in
                             Color.clear.preference(key: WidthPreferenceKey.self, value: geometry.size.width)
                         },
-                    )
+                        )
                 Rectangle()
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [Color.clear, animateFlowColor]),
                             startPoint: .leading,
                             endPoint: .trailing,
-                        ),
-                    )
+                            ),
+                        )
                     .blur(radius: 1.5)
                     .frame(width: animateFlowWidth, height: height)
             }
@@ -202,8 +202,8 @@ struct PowerView: View {
                             gradient: Gradient(colors: [Color.clear, animateFlowColor]),
                             startPoint: .leading,
                             endPoint: .trailing,
-                        ),
-                    )
+                            ),
+                        )
                     .blur(radius: 1.5)
                     .frame(width: animateFlowWidth, height: height)
                     .clipShape(flowShape(width: middleSectionWidth, height: height, startLength: startLength, endLength: endLength, direction: direction))

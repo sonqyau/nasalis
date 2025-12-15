@@ -29,8 +29,7 @@ enum IOKitReader {
             }
 
             if let type = description[kIOPSTypeKey as String] as? String,
-               type != kIOPSInternalBatteryType as String
-            {
+               type != kIOPSInternalBatteryType as String {
                 continue
             }
 
