@@ -2,71 +2,86 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppComposition {
-    private var statusItem: NSStatusItem?
-    private var popover: NSPopover?
-    private var statusHostingView: NSHostingView<StatusView>?
-
+final class AppComposition: NSObject {
+    private let statusItem: NSStatusItem
+    private let popover: NSPopover
+    private let statusHostingView: NSHostingView<StatusView>
     private let store: Store<AppState, AppAction>
     private let mainViewModel: MainViewModel
+    private let popoverController: NSHostingController<MainView>
 
-    init() {
+    private static let popoverSize = NSSize(width: 360, height: 520)
+    private static let minPopoverHeight: CGFloat = 260
+    private static let screenMargin: CGFloat = 40
+
+    override init() {
         store = Store(initialState: AppState(), reducer: appReducer)
-
         mainViewModel = NasalisApp.MainViewModel(store: store)
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        popover = NSPopover()
+
+        let statusView = StatusView(viewModel: mainViewModel)
+        statusHostingView = NSHostingView(rootView: statusView)
+
+        let detailView = MainView(viewModel: mainViewModel)
+        popoverController = NSHostingController(rootView: detailView)
+
+        super.init()
 
         setupStatusBar()
         setupPopover()
     }
 
     private func setupStatusBar() {
-        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.statusItem = statusItem
+        guard let button = statusItem.button else {
+            fatalError("Status item button unavailable")
+        }
 
-        guard let button = statusItem.button else { return }
-
-        let statusView = StatusView(viewModel: mainViewModel)
-        let hostingView = NSHostingView(rootView: statusView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        statusHostingView.wantsLayer = true
+        statusHostingView.layer?.drawsAsynchronously = true
 
         button.image = nil
         button.title = ""
-        button.addSubview(hostingView)
+        button.addSubview(statusHostingView)
 
+        statusHostingView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 1),
-            hostingView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -1),
-            hostingView.topAnchor.constraint(equalTo: button.topAnchor, constant: 1),
-            hostingView.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1),
+            statusHostingView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 2),
+            statusHostingView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
+            statusHostingView.topAnchor.constraint(equalTo: button.topAnchor, constant: 2),
+            statusHostingView.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -2),
         ])
-
-        statusHostingView = hostingView
 
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.target = self
         button.action = #selector(handleStatusBarClick)
+
+        if let cell = button.cell as? NSButtonCell {
+            cell.highlightsBy = []
+        }
     }
 
     private func setupPopover() {
-        let popover = NSPopover()
         popover.behavior = .transient
-        popover.animates = true
+        popover.animates = false
+        popover.contentViewController = popoverController
+        popover.contentSize = Self.popoverSize
 
-        let detailView = MainView(viewModel: mainViewModel)
-        let hostingController = NSHostingController(rootView: detailView)
-        hostingController.view.frame = NSRect(x: 0, y: 0, width: 360, height: 520)
+        popoverController.view.frame = NSRect(origin: .zero, size: Self.popoverSize)
+        popoverController.view.wantsLayer = true
+        popoverController.view.layer?.drawsAsynchronously = true
 
-        popover.contentViewController = hostingController
-        popover.contentSize = NSSize(width: 360, height: 520)
-
-        self.popover = popover
+        if let layer = popoverController.view.layer {
+            layer.shouldRasterize = true
+            layer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        }
     }
 
     @objc private func handleStatusBarClick() {
-        guard let button = statusItem?.button else { return }
-        guard let popover else { return }
+        guard let button = statusItem.button else { return }
 
-        if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+        if let event = NSApp.currentEvent, event.type.rawValue == NSEvent.EventType.rightMouseUp.rawValue {
             showContextMenu(from: button)
             return
         }
@@ -79,42 +94,54 @@ final class AppComposition {
     }
 
     private func showPopover(relativeTo button: NSStatusBarButton) {
-        guard let popover else { return }
         guard !popover.isShown else { return }
 
-        if let hostingController = popover.contentViewController as? NSHostingController<MainView> {
-            hostingController.view.layoutSubtreeIfNeeded()
-            let fittingHeight = hostingController.view.fittingSize.height
+        let view = popoverController.view
+        view.layoutSubtreeIfNeeded()
+        let fittingHeight = view.fittingSize.height
 
-            if let screen = button.window?.screen {
-                let visible = screen.visibleFrame
-                let maxHeight = max(260, visible.height - 40)
-                let desiredHeight = max(260, fittingHeight)
-                let clampedHeight = min(desiredHeight, maxHeight)
-                popover.contentSize = NSSize(width: 360, height: clampedHeight)
-            } else {
-                popover.contentSize = NSSize(width: 360, height: max(260, fittingHeight))
-            }
+        let finalHeight: CGFloat
+        if let screen = button.window?.screen {
+            let maxHeight = max(Self.minPopoverHeight, screen.visibleFrame.height - Self.screenMargin)
+            finalHeight = min(max(Self.minPopoverHeight, fittingHeight), maxHeight)
+        } else {
+            finalHeight = max(Self.minPopoverHeight, fittingHeight)
+        }
+
+        let newSize = NSSize(width: Self.popoverSize.width, height: finalHeight)
+        if popover.contentSize != newSize {
+            popover.contentSize = newSize
         }
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
     }
 
     private func showContextMenu(from button: NSStatusBarButton) {
-        let menu = NSMenu()
+        let menu = Self.contextMenu
+        menu.delegate = self
 
+        statusItem.menu = menu
+        button.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    private static let contextMenu: NSMenu = {
+        let menu = NSMenu()
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit Nasalis", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
+        let quit = NSMenuItem(title: "Quit Nasalis", action: #selector(AppComposition.quit), keyEquivalent: "q")
         menu.addItem(quit)
 
-        statusItem?.menu = menu
-        button.performClick(nil)
-        statusItem?.menu = nil
-    }
+        return menu
+    }()
 
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+}
+
+extension AppComposition: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        menu.items.forEach { $0.target = self }
     }
 }

@@ -46,29 +46,29 @@ struct BattReader: Sendable {
 
     let options: Options
 
-    private static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        return d
-    }()
-
-    private static let queue = DispatchQueue(label: "nasalis.batt-daemon-client", qos: .userInitiated)
+    private static let decoder = JSONDecoder()
+    private static let queue = DispatchQueue(label: "nasalis.batt-daemon-client", qos: .userInitiated, attributes: .concurrent)
 
     init(options: Options = Options()) {
         self.options = options
     }
 
+    @inline(__always)
     func fetchUnifiedTelemetry() async throws -> BattTelemetryResponse {
         try await requestJSON(path: "/telemetry", as: BattTelemetryResponse.self)
     }
 
+    @inline(__always)
     func fetchLimitPercent() async throws -> Int {
         try await requestJSON(path: "/limit", as: Int.self)
     }
 
+    @inline(__always)
     func fetchCurrentChargePercent() async throws -> Int {
         try await requestASCIIInt(path: "/current-charge")
     }
 
+    @inline(__always)
     func fetchCharging() async throws -> Bool {
         try await requestASCIIBool(path: "/charging")
     }
@@ -313,60 +313,71 @@ struct BattReader: Sendable {
         }
     }
 
+    @inline(__always)
     private func parseASCIIInt(_ data: Data) -> Int? {
         data.withUnsafeBytes { raw -> Int? in
             guard let p = raw.bindMemory(to: UInt8.self).baseAddress else { return nil }
             let n = raw.count
+
             var i = 0
-            while i < n {
-                let c = p[i]
-                if c != 9, c != 10, c != 13, c != 32 { break }
+            while i < n && (p[i] == 9 || p[i] == 10 || p[i] == 13 || p[i] == 32) {
                 i &+= 1
             }
-            var sign = 1
-            if i < n, p[i] == 45 { sign = -1; i &+= 1 }
+
+            guard i < n else { return nil }
+
+            let sign = p[i] == 45 ? -1 : 1
+            if p[i] == 45 || p[i] == 43 { i &+= 1 }
+
             var v = 0
-            var any = false
+            var digitCount = 0
             while i < n {
                 let d = Int(p[i]) - 48
-                if d < 0 || d > 9 { break }
-                any = true
+                guard d >= 0, d <= 9 else { break }
+                guard digitCount < 9 else { break }
                 v = v &* 10 &+ d
+                digitCount &+= 1
                 i &+= 1
             }
-            return any ? v * sign : nil
+
+            return digitCount > 0 ? v * sign : nil
         }
     }
 
+    @inline(__always)
     private func parseASCIIBool(_ data: Data) -> Bool {
         data.withUnsafeBytes { raw -> Bool in
             guard let p = raw.bindMemory(to: UInt8.self).baseAddress else { return false }
             let n = raw.count
+
             var i = 0
-            while i < n {
-                let c = p[i]
-                if c != 9, c != 10, c != 13, c != 32 { break }
+            while i < n, p[i] == 9 || p[i] == 10 || p[i] == 13 || p[i] == 32 {
                 i &+= 1
             }
-            if i >= n { return false }
+
+            guard i < n else { return false }
+
             let c0 = p[i]
             if c0 == 49 { return true }
             if c0 == 48 { return false }
+
             if i + 3 < n {
-                let a = p[i] | 0x20
-                let b = p[i + 1] | 0x20
-                let c = p[i + 2] | 0x20
-                let d = p[i + 3] | 0x20
-                if a == 116, b == 114, c == 117, d == 101 { return true }
+                let word = UInt32(p[i] | 0x20) |
+                    (UInt32(p[i + 1] | 0x20) << 8) |
+                    (UInt32(p[i + 2] | 0x20) << 16) |
+                    (UInt32(p[i + 3] | 0x20) << 24)
+                if word == 0x6575_7274 { return true }
             }
+
             if i + 4 < n {
-                let a = p[i] | 0x20
-                let b = p[i + 1] | 0x20
-                let c = p[i + 2] | 0x20
-                let d = p[i + 3] | 0x20
-                let e = p[i + 4] | 0x20
-                if a == 102, b == 97, c == 108, d == 115, e == 101 { return false }
+                let word = UInt32(p[i] | 0x20) |
+                    (UInt32(p[i + 1] | 0x20) << 8) |
+                    (UInt32(p[i + 2] | 0x20) << 16) |
+                    (UInt32(p[i + 3] | 0x20) << 24)
+                let lastChar = p[i + 4] | 0x20
+                if word == 0x736C_6166, lastChar == 101 { return false }
             }
+
             return false
         }
     }

@@ -3,24 +3,35 @@ import IOKit.ps
 
 enum IOKitReader {
     struct BatterySummary: Sendable {
-        var batteryPercent: Int?
-        var isCharging: Bool
+        let batteryPercent: Int?
+        let isCharging: Bool
+
+        @inline(__always)
+        init(batteryPercent: Int?, isCharging: Bool) {
+            self.batteryPercent = batteryPercent
+            self.isCharging = isCharging
+        }
     }
 
+    private static let emptyResult = BatterySummary(batteryPercent: nil, isCharging: false)
+    private static let typeKey = kIOPSTypeKey as String
+    private static let internalBatteryType = kIOPSInternalBatteryType as String
+    private static let currentCapacityKey = kIOPSCurrentCapacityKey as String
+    private static let maxCapacityKey = kIOPSMaxCapacityKey as String
+    private static let isChargingKey = kIOPSIsChargingKey as String
+
+    @inline(__always)
     static func readBatterySummary() async -> BatterySummary {
-        await withCheckedContinuation { continuation in
-            let result = readBatterySummarySync()
-            continuation.resume(returning: result)
-        }
+        readBatterySummarySync()
     }
 
     private static func readBatterySummarySync() -> BatterySummary {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
-            return BatterySummary(batteryPercent: nil, isCharging: false)
+            return emptyResult
         }
 
         guard let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef] else {
-            return BatterySummary(batteryPercent: nil, isCharging: false)
+            return emptyResult
         }
 
         for ps in sources {
@@ -28,25 +39,26 @@ enum IOKitReader {
                 continue
             }
 
-            if let type = description[kIOPSTypeKey as String] as? String,
-               type != kIOPSInternalBatteryType as String {
+            if let type = description[typeKey] as? String,
+               type != internalBatteryType
+            {
                 continue
             }
 
-            let current = description[kIOPSCurrentCapacityKey as String] as? Int
-            let max = description[kIOPSMaxCapacityKey as String] as? Int
+            let current = description[currentCapacityKey] as? Int
+            let max = description[maxCapacityKey] as? Int
 
             let percent: Int? = if let current, let max, max > 0 {
-                Int((Double(current) / Double(max)) * 100.0)
+                (current * 100) / max
             } else {
-                description[kIOPSCurrentCapacityKey as String] as? Int
+                current
             }
 
-            let isCharging = description[kIOPSIsChargingKey as String] as? Bool ?? false
+            let isCharging = description[isChargingKey] as? Bool ?? false
 
             return BatterySummary(batteryPercent: percent, isCharging: isCharging)
         }
 
-        return BatterySummary(batteryPercent: nil, isCharging: false)
+        return emptyResult
     }
 }

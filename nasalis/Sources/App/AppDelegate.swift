@@ -5,7 +5,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appComposition: AppComposition?
 
     func applicationDidFinishLaunching(_: Notification) {
-        SMCReader.invalidateCache()
+        DispatchQueue.global(qos: .userInitiated).async {
+            SMCReader.invalidateCache()
+        }
+
         appComposition = NasalisApp.AppComposition()
+
+        NSApp.setActivationPolicy(.accessory)
+
+        NSApp.appearance = NSAppearance(named: .aqua)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        appComposition = nil
     }
 }

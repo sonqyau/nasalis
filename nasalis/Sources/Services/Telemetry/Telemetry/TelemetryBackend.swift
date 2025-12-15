@@ -3,10 +3,11 @@ import Foundation
 enum TelemetryBackend: String, Sendable {
     case smcBridge
 
-    static let userDefaultsKey = "nasalis.telemetry.backend"
+    private static let userDefaultsKey = "nasalis.telemetry.backend"
+    private static let defaultBackend: Self = .smcBridge
 
+    @inline(__always)
     static func current() -> Self {
-        let raw = UserDefaults.standard.string(forKey: userDefaultsKey) ?? Self.smcBridge.rawValue
-        return Self(rawValue: raw) ?? .smcBridge
+        defaultBackend
     }
 }

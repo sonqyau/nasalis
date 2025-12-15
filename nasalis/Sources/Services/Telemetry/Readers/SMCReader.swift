@@ -2,6 +2,11 @@ import Foundation
 import SMCBridge
 
 struct SMCReader: Sendable {
+    private static let temperatureMin: Float = -20.0
+    private static let temperatureMax: Float = 120.0
+    private static let temperatureEpsilon: Float = 0.001
+
+    @inline(__always)
     func readTelemetry() -> SMCSnapshot {
         var data = SMCBridgeData()
         guard SMCBridgeReadAll(&data) else {
@@ -9,39 +14,39 @@ struct SMCReader: Sendable {
         }
 
         return SMCSnapshot(
-            systemLoadW: doubleOrNil(data.systemPowerW),
-            adapterPowerW: doubleOrNil(data.adapterPowerW),
-            adapterVoltageV: doubleOrNil(data.adapterVoltageV),
-            adapterAmperageA: doubleOrNil(data.adapterAmperageA),
-            batteryVoltageV: doubleOrNil(data.batteryVoltageV),
-            batteryAmperageA: doubleOrNil(data.batteryAmperageA),
-            batteryPowerW: doubleOrNil(data.batteryPowerW),
-            batteryTemperatureC: temperatureOrNil(data.batteryTemperatureC),
-            batteryCycleCount: intOrNil(data.batteryCycleCount),
-            )
+            systemLoadW: Self.doubleOrNil(data.systemPowerW),
+            adapterPowerW: Self.doubleOrNil(data.adapterPowerW),
+            adapterVoltageV: Self.doubleOrNil(data.adapterVoltageV),
+            adapterAmperageA: Self.doubleOrNil(data.adapterAmperageA),
+            batteryVoltageV: Self.doubleOrNil(data.batteryVoltageV),
+            batteryAmperageA: Self.doubleOrNil(data.batteryAmperageA),
+            batteryPowerW: Self.doubleOrNil(data.batteryPowerW),
+            batteryTemperatureC: Self.temperatureOrNil(data.batteryTemperatureC),
+            batteryCycleCount: Self.intOrNil(data.batteryCycleCount),
+        )
     }
 
+    @inline(__always)
     static func invalidateCache() {
         SMCBridgeInvalidateCache()
     }
 
-    private func doubleOrNil(_ value: Float) -> Double? {
-        if value.isNaN { return nil }
+    @inline(__always)
+    private static func doubleOrNil(_ value: Float) -> Double? {
+        value.isNaN ? nil : Double(value)
+    }
+
+    @inline(__always)
+    private static func temperatureOrNil(_ value: Float) -> Double? {
+        guard !value.isNaN else { return nil }
+        guard abs(value) >= temperatureEpsilon else { return nil }
+        guard value >= temperatureMin, value <= temperatureMax else { return nil }
         return Double(value)
     }
 
-    private func temperatureOrNil(_ value: Float) -> Double? {
-        if value.isNaN { return nil }
-        let v = Double(value)
-
-        if abs(v) < 0.001 { return nil }
-        if v < -20 || v > 120 { return nil }
-        return v
-    }
-
-    private func intOrNil(_ value: Int32) -> Int? {
-        if value < 0 { return nil }
-        return Int(value)
+    @inline(__always)
+    private static func intOrNil(_ value: Int32) -> Int? {
+        value < 0 ? nil : Int(value)
     }
 }
 
@@ -66,7 +71,7 @@ struct SMCSnapshot: Sendable {
         batteryPowerW: Double? = nil,
         batteryTemperatureC: Double? = nil,
         batteryCycleCount: Int? = nil,
-        ) {
+    ) {
         self.systemLoadW = systemLoadW
         self.adapterPowerW = adapterPowerW
         self.adapterVoltageV = adapterVoltageV

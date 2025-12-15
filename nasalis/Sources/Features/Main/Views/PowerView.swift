@@ -1,7 +1,7 @@
 import SwiftUI
 
-struct WidthPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat { 0 }
+private struct WidthPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
@@ -14,155 +14,280 @@ struct PowerView: View {
     let systemLoadW: Double?
     let isCharging: Bool
 
-    private let iconSize: CGFloat = 16
-    private let flowHeight: CGFloat = 40
-    private let spacing: CGFloat = 5
-    private let cornerRadius: CGFloat = 12
+    static let iconSize: CGFloat = 16
+    static let flowHeight: CGFloat = 40
+    static let spacing: CGFloat = 5
+    static let cornerRadius: CGFloat = 12
+    static let iconFrame: CGFloat = iconSize + 20
+    private static let animationInterval: TimeInterval = 4.0
 
-    @State private var middleSectionWidth: CGFloat = 10
-    @State private var animateCharge = false
-    @State private var animateLoad = false
-    @State private var animateFlowWidth: CGFloat = 0
-    @State private var animateFlowColor = Color.yellow.opacity(0.8)
-    @State private var animationTimer: Timer?
+    @State private var middleSectionWidth: CGFloat = 50
+    @State private var animationPhase: UInt8 = 0
+    @State private var flowProgress: CGFloat = 0
+    @State private var animationWorkItem: DispatchWorkItem?
 
     var body: some View {
         let inputPower = adapterPowerW ?? 0
         let batteryPower = batteryPowerW ?? 0
-        let systemLoad = systemLoadW ?? (batteryPower < 0 ? abs(batteryPower) : 0)
+        let systemLoad = systemLoadW ?? (batteryPower < 0 ? -batteryPower : 0)
+        let isInputActive = inputPower > 0.01
+        let isBatteryDischarging = batteryPower < 0
+        let isChargePhase = animationPhase & 1 == 1
+        let isLoadPhase = animationPhase & 2 == 2
 
-        HStack(spacing: spacing) {
-            VStack(alignment: .leading, spacing: flowHeight) {
-                if inputPower > 0.01 {
-                    ZStack {
-                        generateSquircle(width: iconSize + 20, height: batteryPower > 0 ? flowHeight * 1.5 : flowHeight, radius: cornerRadius, corners: [true, false, false, true])
-                            .fill(.ultraThickMaterial)
-                        Image(systemName: "powerplug.portrait")
-                            .font(.system(size: iconSize))
-                            .foregroundColor(animateCharge ? Color.yellow : Color.primary)
-                            .offset(x: 1, y: 0)
-                    }
-                    .frame(width: iconSize + 20, height: batteryPower > 0 ? flowHeight * 1.5 : flowHeight)
+        HStack(spacing: Self.spacing) {
+            VStack(alignment: .leading, spacing: Self.flowHeight) {
+                if isInputActive {
+                    IconContainer(
+                        icon: "powerplug.portrait",
+                        height: batteryPower > 0 ? Self.flowHeight * 1.5 : Self.flowHeight,
+                        isAnimated: isChargePhase,
+                        color: .yellow,
+                        corners: [true, false, false, true],
+                    )
                 }
 
-                if batteryPower < 0 {
-                    ZStack {
-                        generateSquircle(width: iconSize + 20, height: flowHeight, radius: cornerRadius, corners: [true, false, false, true])
-                            .fill(.ultraThickMaterial)
-                        Image(systemName: "battery.75")
-                            .font(.system(size: iconSize))
-                            .foregroundColor(animateCharge ? Color.orange : Color.primary)
-                            .offset(x: 1, y: 0)
-                    }
-                    .frame(width: iconSize + 20, height: flowHeight)
-                }
-            }
-
-            Group {
-                if inputPower > 0.01 {
-                    if abs(batteryPower) < 0.0001 {
-                        flowBar(height: flowHeight, label: watts(inputPower))
-                    } else if batteryPower > 0 {
-                        VStack(spacing: 0) {
-                            flowShaped(height: flowHeight * 1.5, startLength: flowHeight * 0.75, endLength: flowHeight, direction: 1, label: watts(batteryPower))
-                            flowShaped(height: flowHeight * 1.5, startLength: flowHeight * 0.75, endLength: flowHeight, direction: 0, label: watts(systemLoad))
-                        }
-                    } else {
-                        VStack(spacing: 0) {
-                            flowShaped(height: flowHeight * 1.5, startLength: flowHeight, endLength: flowHeight * 0.75, direction: 0, label: watts(inputPower))
-                            flowShaped(height: flowHeight * 1.5, startLength: flowHeight, endLength: flowHeight * 0.75, direction: 1, label: watts(abs(batteryPower)))
-                        }
-                    }
-                } else {
-                    flowBar(height: flowHeight, label: watts(abs(batteryPower)))
+                if isBatteryDischarging {
+                    IconContainer(
+                        icon: "battery.75",
+                        height: Self.flowHeight,
+                        isAnimated: isChargePhase,
+                        color: .orange,
+                        corners: [true, false, false, true],
+                    )
                 }
             }
 
-            VStack(alignment: .trailing, spacing: flowHeight) {
+            FlowSection(
+                inputPower: inputPower,
+                batteryPower: batteryPower,
+                systemLoad: systemLoad,
+                flowProgress: flowProgress,
+                middleSectionWidth: middleSectionWidth,
+                animationPhase: animationPhase,
+            )
+
+            VStack(alignment: .trailing, spacing: Self.flowHeight) {
                 if batteryPower > 0 {
-                    ZStack {
-                        generateSquircle(width: iconSize + 20, height: flowHeight, radius: cornerRadius, corners: [false, true, true, false])
-                            .fill(.ultraThickMaterial)
-                        Image(systemName: "battery.100.bolt")
-                            .font(.system(size: iconSize))
-                            .foregroundColor(animateLoad ? Color.green : Color.primary)
-                            .offset(x: -1, y: 0)
-                    }
-                    .frame(width: iconSize + 20, height: flowHeight)
+                    IconContainer(
+                        icon: "battery.100.bolt",
+                        height: Self.flowHeight,
+                        isAnimated: isLoadPhase,
+                        color: .green,
+                        corners: [false, true, true, false],
+                        offset: CGPoint(x: -1, y: 0),
+                    )
                 }
 
-                ZStack {
-                    generateSquircle(width: iconSize + 20, height: (batteryPower < 0 && inputPower > 0.01) ? flowHeight * 1.5 : flowHeight, radius: cornerRadius, corners: [false, true, true, false])
-                        .fill(.ultraThickMaterial)
-                    Image(systemName: "laptopcomputer")
-                        .font(.system(size: iconSize))
-                        .foregroundColor(animateLoad ? Color.blue : Color.primary)
-                        .offset(x: -1, y: 0)
-                }
-                .frame(width: iconSize + 20, height: (batteryPower < 0 && inputPower > 0.01) ? flowHeight * 1.5 : flowHeight)
+                IconContainer(
+                    icon: "laptopcomputer",
+                    height: (isBatteryDischarging && isInputActive) ? Self.flowHeight * 1.5 : Self.flowHeight,
+                    isAnimated: isLoadPhase,
+                    color: .blue,
+                    corners: [false, true, true, false],
+                    offset: CGPoint(x: -1, y: 0),
+                )
             }
-            .frame(width: iconSize + 20)
+            .frame(width: Self.iconFrame)
         }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if middleSectionWidth <= 10 {
-                    let screenWidth = NSScreen.main?.frame.width ?? 800
-                    let parentWidth = screenWidth * 0.4 - ((iconSize + 20) * 2) - (spacing * 2)
-                    middleSectionWidth = max(parentWidth, 50)
-                }
-            }
-
-            startAnimationCycle()
-            animationTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { _ in
-                Task { @MainActor in
-                    startAnimationCycle()
-                }
-            }
-        }
-        .onDisappear {
-            animationTimer?.invalidate()
-            animationTimer = nil
-        }
+        .onAppear(perform: startAnimation)
+        .onDisappear(perform: stopAnimation)
         .onPreferenceChange(WidthPreferenceKey.self) { width in
-            if width > 10 {
+            if width > middleSectionWidth {
                 middleSectionWidth = width
             }
         }
     }
 
-    @MainActor
-    private func startAnimationCycle() {
-        animateFlowWidth = 0
-        animateFlowColor = Color.yellow.opacity(0.8)
-        withAnimation(.easeOut(duration: 1.0)) {
-            animateCharge = true
-            animateLoad = false
+    private func startAnimation() {
+        guard middleSectionWidth <= 50 else { return }
+        let screenWidth = NSScreen.main?.frame.width ?? 800
+        middleSectionWidth = max(screenWidth * 0.4 - (Self.iconFrame * 2) - (Self.spacing * 2), 50)
+
+        scheduleNextCycle()
+    }
+
+    private func stopAnimation() {
+        animationWorkItem?.cancel()
+        animationWorkItem = nil
+    }
+
+    private func scheduleNextCycle() {
+        animationWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem {
+            Task { @MainActor in
+                runAnimationCycle()
+                scheduleNextCycle()
+            }
         }
+
+        animationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.animationInterval, execute: workItem)
+    }
+
+    @MainActor
+    private func runAnimationCycle() {
+        withAnimation(.easeInOut(duration: 1.0)) {
+            animationPhase = 1
+            flowProgress = 0
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeIn(duration: 1.0)) {
-                animateCharge = false
+            withAnimation(.linear(duration: 2.0)) {
+                flowProgress = 1.0
             }
-            withAnimation(.linear(duration: 1.0)) {
-                animateFlowWidth = middleSectionWidth / 2
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    animateFlowColor = Color.blue.opacity(0.8)
-                }
-                withAnimation(.linear(duration: 1.0)) {
-                    animateFlowWidth = middleSectionWidth
-                }
+            withAnimation(.easeInOut(duration: 1.0).delay(1.0)) {
+                animationPhase = 2
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                withAnimation(.easeOut(duration: 1.0)) {
-                    animateFlowColor = Color.clear
-                    animateLoad = true
+                withAnimation(.easeInOut(duration: 1.0)) {
+                    animationPhase = 0
+                    flowProgress = 0
                 }
             }
         }
     }
 
-    private func flowBar(height: CGFloat, label: String) -> some View {
+    static func watts(_ value: Double) -> String {
+        String(format: "%.2f W", value)
+    }
+}
+
+private struct IconContainer: View {
+    let icon: String
+    let height: CGFloat
+    let isAnimated: Bool
+    let color: Color
+    let corners: [Bool]
+    var offset: CGPoint = .init(x: 1, y: 0)
+
+    private static let iconFont = Font.system(size: PowerView.iconSize)
+
+    var body: some View {
+        ZStack {
+            SquircleShape(
+                width: PowerView.iconFrame,
+                height: height,
+                radius: PowerView.cornerRadius,
+                corners: corners,
+            )
+            .fill(.ultraThickMaterial)
+
+            Image(systemName: icon)
+                .font(Self.iconFont)
+                .foregroundColor(isAnimated ? color : .primary)
+                .offset(x: offset.x, y: offset.y)
+        }
+        .frame(width: PowerView.iconFrame, height: height)
+    }
+}
+
+private struct FlowSection: View {
+    let inputPower: Double
+    let batteryPower: Double
+    let systemLoad: Double
+    let flowProgress: CGFloat
+    let middleSectionWidth: CGFloat
+    let animationPhase: UInt8
+
+    private var flowColor: Color {
+        switch animationPhase {
+        case 1: .yellow.opacity(0.8)
+        case 2: .blue.opacity(0.8)
+        default: .clear
+        }
+    }
+
+    private var flowWidth: CGFloat {
+        flowProgress * middleSectionWidth
+    }
+
+    var body: some View {
+        Group {
+            if inputPower > 0.01 {
+                if abs(batteryPower) < 0.0001 {
+                    FlowBar(
+                        height: PowerView.flowHeight,
+                        label: PowerView.watts(inputPower),
+                        flowWidth: flowWidth,
+                        flowColor: flowColor,
+                        middleSectionWidth: middleSectionWidth,
+                    )
+                } else if batteryPower > 0 {
+                    VStack(spacing: 0) {
+                        FlowShaped(
+                            height: PowerView.flowHeight * 1.5,
+                            startLength: PowerView.flowHeight * 0.75,
+                            endLength: PowerView.flowHeight,
+                            direction: 1,
+                            label: PowerView.watts(batteryPower),
+                            flowWidth: flowWidth,
+                            flowColor: flowColor,
+                            middleSectionWidth: middleSectionWidth,
+                        )
+                        FlowShaped(
+                            height: PowerView.flowHeight * 1.5,
+                            startLength: PowerView.flowHeight * 0.75,
+                            endLength: PowerView.flowHeight,
+                            direction: 0,
+                            label: PowerView.watts(systemLoad),
+                            flowWidth: flowWidth,
+                            flowColor: flowColor,
+                            middleSectionWidth: middleSectionWidth,
+                        )
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        FlowShaped(
+                            height: PowerView.flowHeight * 1.5,
+                            startLength: PowerView.flowHeight,
+                            endLength: PowerView.flowHeight * 0.75,
+                            direction: 0,
+                            label: PowerView.watts(inputPower),
+                            flowWidth: flowWidth,
+                            flowColor: flowColor,
+                            middleSectionWidth: middleSectionWidth,
+                        )
+                        FlowShaped(
+                            height: PowerView.flowHeight * 1.5,
+                            startLength: PowerView.flowHeight,
+                            endLength: PowerView.flowHeight * 0.75,
+                            direction: 1,
+                            label: PowerView.watts(-batteryPower),
+                            flowWidth: flowWidth,
+                            flowColor: flowColor,
+                            middleSectionWidth: middleSectionWidth,
+                        )
+                    }
+                }
+            } else {
+                FlowBar(
+                    height: PowerView.flowHeight,
+                    label: PowerView.watts(-batteryPower),
+                    flowWidth: flowWidth,
+                    flowColor: flowColor,
+                    middleSectionWidth: middleSectionWidth,
+                )
+            }
+        }
+    }
+}
+
+private struct FlowBar: View {
+    let height: CGFloat
+    let label: String
+    let flowWidth: CGFloat
+    let flowColor: Color
+    let middleSectionWidth: CGFloat
+
+    private static let gradient = LinearGradient(
+        colors: [.clear, .white],
+        startPoint: .leading,
+        endPoint: .trailing,
+    )
+
+    var body: some View {
         ZStack {
             ZStack(alignment: .leading) {
                 Rectangle()
@@ -172,103 +297,101 @@ struct PowerView: View {
                         GeometryReader { geometry in
                             Color.clear.preference(key: WidthPreferenceKey.self, value: geometry.size.width)
                         },
-                        )
+                    )
+
                 Rectangle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.clear, animateFlowColor]),
-                            startPoint: .leading,
-                            endPoint: .trailing,
-                            ),
-                        )
+                    .fill(Self.gradient)
+                    .colorMultiply(flowColor)
                     .blur(radius: 1.5)
-                    .frame(width: animateFlowWidth, height: height)
+                    .frame(width: flowWidth, height: height)
             }
+
             Text(label)
                 .font(.body)
         }
     }
+}
 
-    private func flowShaped(height: CGFloat, startLength: CGFloat, endLength: CGFloat, direction: Int, label: String) -> some View {
+private struct FlowShaped: View {
+    let height: CGFloat
+    let startLength: CGFloat
+    let endLength: CGFloat
+    let direction: Int
+    let label: String
+    let flowWidth: CGFloat
+    let flowColor: Color
+    let middleSectionWidth: CGFloat
+
+    private static let gradient = LinearGradient(
+        colors: [.clear, .white],
+        startPoint: .leading,
+        endPoint: .trailing,
+    )
+
+    private var clipShape: FlowClipShape {
+        FlowClipShape(
+            width: middleSectionWidth,
+            height: height,
+            startLength: startLength,
+            endLength: endLength,
+            direction: direction,
+        )
+    }
+
+    var body: some View {
         ZStack {
             ZStack(alignment: .leading) {
                 Rectangle()
                     .fill(.ultraThickMaterial)
                     .frame(width: middleSectionWidth, height: height)
-                    .clipShape(flowShape(width: middleSectionWidth, height: height, startLength: startLength, endLength: endLength, direction: direction))
+                    .clipShape(clipShape)
+
                 Rectangle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.clear, animateFlowColor]),
-                            startPoint: .leading,
-                            endPoint: .trailing,
-                            ),
-                        )
+                    .fill(Self.gradient)
+                    .colorMultiply(flowColor)
                     .blur(radius: 1.5)
-                    .frame(width: animateFlowWidth, height: height)
-                    .clipShape(flowShape(width: middleSectionWidth, height: height, startLength: startLength, endLength: endLength, direction: direction))
+                    .frame(width: flowWidth, height: height)
+                    .clipShape(clipShape)
             }
+
             Text(label)
                 .font(.body)
         }
     }
+}
 
-    private func watts(_ value: Double) -> String {
-        String(format: "%.2f W", value)
+private struct SquircleShape: Shape {
+    let width: CGFloat
+    let height: CGFloat
+    let radius: CGFloat
+    let corners: [Bool]
+
+    private static let coefficients: [CGFloat] = [0.0, 6.6844, 14.4275, 23.6278, 36.7519, 63.0]
+    private static let anchors: [CGFloat] = [11.457, 8.843]
+
+    func path(in _: CGRect) -> Path {
+        generateSquircle(width: width, height: height, radius: radius, corners: corners)
     }
 }
 
 func generateSquircle(width: CGFloat, height: CGFloat, radius: CGFloat, corners: [Bool]) -> Path {
-    precondition(corners.count == 4)
     var path = Path()
 
-    let f5: CGFloat = 63.0
-    let f4: CGFloat = 36.7519
-    let f3: CGFloat = 23.6278
-    let f2: CGFloat = 14.4275
-    let f1: CGFloat = 6.6844
-    let f0: CGFloat = 0.0
-    let a0: CGFloat = 11.457
-    let a1: CGFloat = 8.843
+    let ratio = radius * 0.02857142857
+    let coeffs: (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat) = (
+        0, 6.6844 * ratio, 14.4275 * ratio, 23.6278 * ratio, 36.7519 * ratio, 63.0 * ratio,
+    )
+    let anchors: (CGFloat, CGFloat) = (11.457 * ratio, 8.843 * ratio)
 
-    let refRadius: CGFloat = 35
-    let ratio: CGFloat = refRadius == 0 ? 0 : radius / refRadius
+    let (s0, s1, s2, s3, s4, s5) = coeffs
+    let (s6, s7) = anchors
 
-    let s0 = f0 * ratio
-    let s1 = f1 * ratio
-    let s2 = f2 * ratio
-    let s3 = f3 * ratio
-    let s4 = f4 * ratio
-    let s5 = f5 * ratio
-    let s6 = a0 * ratio
-    let s7 = a1 * ratio
-
-    let w0 = width - s0
-    let w1 = width - s1
-    let w2 = width - s2
-    let w3 = width - s3
-    let w4 = width - s4
-    let w5 = width - s5
-    let w6 = width - s6
-    let w7 = width - s7
-
-    let h0 = height - s0
-    let h1 = height - s1
-    let h2 = height - s2
-    let h3 = height - s3
-    let h4 = height - s4
-    let h5 = height - s5
-    let h6 = height - s6
-    let h7 = height - s7
+    let w = (width - s0, width - s1, width - s2, width - s3, width - s4, width - s5, width - s6, width - s7)
+    let h = (height - s0, height - s1, height - s2, height - s3, height - s4, height - s5, height - s6, height - s7)
 
     path.move(to: CGPoint(x: s0, y: s5))
 
-    let tl = corners[0]
-    let tr = corners[1]
-    let br = corners[2]
-    let bl = corners[3]
-
-    if bl {
+    if corners[3] {
         path.addCurve(to: CGPoint(x: s1, y: s2), control1: CGPoint(x: s0, y: s4), control2: CGPoint(x: s0, y: s3))
         path.addCurve(to: CGPoint(x: s2, y: s1), control1: CGPoint(x: s7, y: s6), control2: CGPoint(x: s6, y: s7))
         path.addCurve(to: CGPoint(x: s5, y: s0), control1: CGPoint(x: s3, y: s0), control2: CGPoint(x: s4, y: s0))
@@ -277,37 +400,37 @@ func generateSquircle(width: CGFloat, height: CGFloat, radius: CGFloat, corners:
         path.addLine(to: CGPoint(x: s5, y: s0))
     }
 
-    path.addLine(to: CGPoint(x: w5, y: s0))
+    path.addLine(to: CGPoint(x: w.4, y: s0))
 
-    if br {
-        path.addCurve(to: CGPoint(x: w2, y: s1), control1: CGPoint(x: w4, y: s0), control2: CGPoint(x: w3, y: s0))
-        path.addCurve(to: CGPoint(x: w1, y: s2), control1: CGPoint(x: w6, y: s7), control2: CGPoint(x: w7, y: s6))
-        path.addCurve(to: CGPoint(x: w0, y: s5), control1: CGPoint(x: w0, y: s3), control2: CGPoint(x: w0, y: s4))
+    if corners[2] {
+        path.addCurve(to: CGPoint(x: w.1, y: s1), control1: CGPoint(x: w.3, y: s0), control2: CGPoint(x: w.2, y: s0))
+        path.addCurve(to: CGPoint(x: w.0, y: s2), control1: CGPoint(x: w.5, y: s7), control2: CGPoint(x: w.6, y: s6))
+        path.addCurve(to: CGPoint(x: w.0, y: s5), control1: CGPoint(x: w.0, y: s3), control2: CGPoint(x: w.0, y: s4))
     } else {
-        path.addLine(to: CGPoint(x: w0, y: s0))
-        path.addLine(to: CGPoint(x: w0, y: s5))
+        path.addLine(to: CGPoint(x: w.0, y: s0))
+        path.addLine(to: CGPoint(x: w.0, y: s5))
     }
 
-    path.addLine(to: CGPoint(x: w0, y: h5))
+    path.addLine(to: CGPoint(x: w.0, y: h.4))
 
-    if tr {
-        path.addCurve(to: CGPoint(x: w1, y: h2), control1: CGPoint(x: w0, y: h4), control2: CGPoint(x: w0, y: h3))
-        path.addCurve(to: CGPoint(x: w2, y: h1), control1: CGPoint(x: w7, y: h6), control2: CGPoint(x: w6, y: h7))
-        path.addCurve(to: CGPoint(x: w5, y: h0), control1: CGPoint(x: w3, y: h0), control2: CGPoint(x: w4, y: h0))
+    if corners[1] {
+        path.addCurve(to: CGPoint(x: w.0, y: h.1), control1: CGPoint(x: w.0, y: h.3), control2: CGPoint(x: w.0, y: h.2))
+        path.addCurve(to: CGPoint(x: w.1, y: h.0), control1: CGPoint(x: w.6, y: h.5), control2: CGPoint(x: w.5, y: h.6))
+        path.addCurve(to: CGPoint(x: w.4, y: h.0), control1: CGPoint(x: w.2, y: h.0), control2: CGPoint(x: w.3, y: h.0))
     } else {
-        path.addLine(to: CGPoint(x: w0, y: h0))
-        path.addLine(to: CGPoint(x: w5, y: h0))
+        path.addLine(to: CGPoint(x: w.0, y: h.0))
+        path.addLine(to: CGPoint(x: w.4, y: h.0))
     }
 
-    path.addLine(to: CGPoint(x: s5, y: h0))
+    path.addLine(to: CGPoint(x: s5, y: h.0))
 
-    if tl {
-        path.addCurve(to: CGPoint(x: s2, y: h1), control1: CGPoint(x: s4, y: h0), control2: CGPoint(x: s3, y: h0))
-        path.addCurve(to: CGPoint(x: s1, y: h2), control1: CGPoint(x: s6, y: h7), control2: CGPoint(x: s7, y: h6))
-        path.addCurve(to: CGPoint(x: s0, y: h5), control1: CGPoint(x: s0, y: h3), control2: CGPoint(x: s0, y: h4))
+    if corners[0] {
+        path.addCurve(to: CGPoint(x: s2, y: h.0), control1: CGPoint(x: s4, y: h.0), control2: CGPoint(x: s3, y: h.0))
+        path.addCurve(to: CGPoint(x: s1, y: h.1), control1: CGPoint(x: s6, y: h.6), control2: CGPoint(x: s7, y: h.5))
+        path.addCurve(to: CGPoint(x: s0, y: h.4), control1: CGPoint(x: s0, y: h.2), control2: CGPoint(x: s0, y: h.3))
     } else {
-        path.addLine(to: CGPoint(x: s0, y: h0))
-        path.addLine(to: CGPoint(x: s0, y: h5))
+        path.addLine(to: CGPoint(x: s0, y: h.0))
+        path.addLine(to: CGPoint(x: s0, y: h.4))
     }
 
     path.closeSubpath()
@@ -329,27 +452,23 @@ struct FlowClipShape: Shape {
 func flowShape(width: CGFloat, height: CGFloat, startLength: CGFloat, endLength: CGFloat, direction: Int) -> Path {
     var path = Path()
 
+    let w3 = width * 0.3
+    let w7 = width * 0.7
+
     if direction == 0 {
-        path.move(to: CGPoint.zero)
-        let c1 = CGPoint(x: width * 0.3, y: 0)
-        let c2 = CGPoint(x: width * 0.7, y: height - endLength)
-        path.addCurve(to: CGPoint(x: width, y: height - endLength), control1: c1, control2: c2)
+        let endY = height - endLength
+        path.move(to: .zero)
+        path.addCurve(to: CGPoint(x: width, y: endY), control1: CGPoint(x: w3, y: 0), control2: CGPoint(x: w7, y: endY))
         path.addLine(to: CGPoint(x: width, y: height))
-        let c3 = CGPoint(x: width * 0.7, y: height)
-        let c4 = CGPoint(x: width * 0.3, y: startLength)
-        path.addCurve(to: CGPoint(x: 0, y: startLength), control1: c3, control2: c4)
-        path.closeSubpath()
+        path.addCurve(to: CGPoint(x: 0, y: startLength), control1: CGPoint(x: w7, y: height), control2: CGPoint(x: w3, y: startLength))
     } else {
-        path.move(to: CGPoint(x: 0, y: height - startLength))
-        let c1 = CGPoint(x: width * 0.3, y: height - startLength)
-        let c2 = CGPoint(x: width * 0.7, y: 0)
-        path.addCurve(to: CGPoint(x: width, y: 0), control1: c1, control2: c2)
+        let startY = height - startLength
+        path.move(to: CGPoint(x: 0, y: startY))
+        path.addCurve(to: CGPoint(x: width, y: 0), control1: CGPoint(x: w3, y: startY), control2: CGPoint(x: w7, y: 0))
         path.addLine(to: CGPoint(x: width, y: endLength))
-        let c3 = CGPoint(x: width * 0.7, y: endLength)
-        let c4 = CGPoint(x: width * 0.3, y: height)
-        path.addCurve(to: CGPoint(x: 0, y: height), control1: c3, control2: c4)
-        path.closeSubpath()
+        path.addCurve(to: CGPoint(x: 0, y: height), control1: CGPoint(x: w7, y: endLength), control2: CGPoint(x: w3, y: height))
     }
 
+    path.closeSubpath()
     return path
 }

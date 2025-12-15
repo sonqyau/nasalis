@@ -1,10 +1,19 @@
 import AppKit
+import Foundation
 
-let app = NSApplication.shared
+autoreleasepool {
+    let app = NSApplication.shared
 
-let delegate = AppDelegate()
+    app.setActivationPolicy(.accessory)
 
-app.delegate = delegate
+    app.isAutomaticCustomizeTouchBarMenuItemEnabled = false
 
-app.setActivationPolicy(.accessory)
-app.run()
+    app.appearance = NSAppearance(named: .aqua)
+
+    UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+
+    let delegate = AppDelegate()
+    app.delegate = delegate
+
+    app.run()
+}

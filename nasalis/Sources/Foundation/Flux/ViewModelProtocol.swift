@@ -3,14 +3,13 @@ import Foundation
 
 @MainActor
 protocol ViewModelProtocol: ObservableObject {
-    associatedtype Input
-    associatedtype Output
+    associatedtype Input: ViewModelInput
+    associatedtype Output: ViewModelOutput
 
     var input: Input { get }
-
     var output: Output { get }
 }
 
-protocol ViewModelInput {}
+protocol ViewModelInput: Sendable {}
 
-protocol ViewModelOutput: ObservableObject {}
+protocol ViewModelOutput: ObservableObject, Sendable {}

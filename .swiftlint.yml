@@ -157,8 +157,6 @@ opt_in_rules:
 attributes:
   always_on_same_line: ["@IBAction", "@IBSegueAction", "@NSManaged", "@escaping", "@objc", "@frozen"]
 
-
-
 identifier_name:
   min_length: 1
   max_length:
@@ -170,12 +168,9 @@ identifier_name:
 inclusive_language:
   override_allowed_terms: ["master", "blacklist", "whitelist"]
 
-
-
 nesting:
   type_level: 2
   function_level: 5
 
 trailing_comma:
   mandatory_comma: true
-

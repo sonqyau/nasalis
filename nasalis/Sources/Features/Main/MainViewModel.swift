@@ -12,10 +12,13 @@ final class MainViewModel: ViewModelProtocol {
     private var stateSubscriptionTask: Task<Void, Never>?
     private var pollingTask: Task<Void, Never>?
 
+    private static let pollingInterval: Duration = .seconds(1)
+    private static let telemetryUpdatedAction = AppAction.telemetryUpdated
+
     init(
         store: Store<AppState, AppAction>,
         telemetryService: TelemetryServiceProtocol = TelemetryService(),
-        ) {
+    ) {
         self.store = store
         self.telemetryService = telemetryService
         input = BatteryInput()
@@ -32,38 +35,32 @@ final class MainViewModel: ViewModelProtocol {
     }
 
     private func setupActionHandling() {
-        actionHandlingTask = Task { [weak self] in
-            guard let self else { return }
-
+        actionHandlingTask = Task {
             for await action in input.actions {
-                await handle(action)
+                await self.handle(action)
             }
         }
     }
 
     private func setupStateSubscription() {
-        stateSubscriptionTask = Task { [weak self] in
-            guard let self else { return }
-
+        stateSubscriptionTask = Task {
             for await state in await store.states() {
-                output.telemetry = state.telemetry
+                self.output.telemetry = state.telemetry
             }
         }
     }
 
+    @inline(__always)
     private func handle(_ action: MainActions) async {
         switch action {
         case .viewAppeared:
             await startTelemetryPolling()
-
         case .viewDisappeared:
             stopTelemetryPolling()
-
         case .refreshRequested:
             await refreshTelemetry()
-
         case let .telemetryUpdated(snapshot):
-            await store.dispatch(.telemetryUpdated(snapshot))
+            await store.dispatch(Self.telemetryUpdatedAction(snapshot))
         }
     }
 
@@ -72,23 +69,20 @@ final class MainViewModel: ViewModelProtocol {
 
         output.isLoading = true
 
-        pollingTask = Task { [weak self] in
-            guard let self else { return }
-
+        pollingTask = Task {
             while !Task.isCancelled {
-                let snapshot = await telemetryService.fetchSnapshot()
-                input.send(.telemetryUpdated(snapshot))
+                let snapshot = await self.telemetryService.fetchSnapshot()
+                self.input.send(.telemetryUpdated(snapshot))
 
-                await MainActor.run {
-                    self.output.isLoading = false
-                    self.output.error = nil
-                }
+                self.output.isLoading = false
+                self.output.error = nil
 
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: Self.pollingInterval)
             }
         }
     }
 
+    @inline(__always)
     private func stopTelemetryPolling() {
         pollingTask?.cancel()
         pollingTask = nil
@@ -100,6 +94,7 @@ final class MainViewModel: ViewModelProtocol {
 
         let snapshot = await telemetryService.fetchSnapshot()
         input.send(.telemetryUpdated(snapshot))
+
         output.error = nil
         output.isLoading = false
     }
@@ -112,6 +107,7 @@ protocol TelemetryServiceProtocol: Sendable {
 final class TelemetryService: TelemetryServiceProtocol {
     private let client = TelemetryClient()
 
+    @inline(__always)
     func fetchSnapshot() async -> TelemetrySnapshot {
         await client.fetchSnapshot()
     }

@@ -4,42 +4,76 @@ actor Store<State: Sendable, Action: Sendable> {
     private var state: State
     private let reducer: Reducer<State, Action>
 
-    private var continuations: [UUID: AsyncStream<State>.Continuation] = [:]
+    private var continuations: ContiguousArray<AsyncStream<State>.Continuation> = []
+    private var continuationCount: Int = 0
+
+    private let maxContinuations: Int = 16
 
     init(initialState: State, reducer: @escaping Reducer<State, Action>) {
         state = initialState
         self.reducer = reducer
+        continuations.reserveCapacity(maxContinuations)
     }
 
+    @inline(__always)
     func currentState() -> State {
         state
     }
 
+    @inline(__always)
     func dispatch(_ action: Action) {
         reducer(&state, action)
-        broadcast(state)
+        broadcastState()
     }
 
     func states() -> AsyncStream<State> {
-        AsyncStream { continuation in
-            let id = UUID()
-            continuations[id] = continuation
-            continuation.yield(state)
+        AsyncStream { [weak self] continuation in
+            guard let self else {
+                continuation.finish()
+                return
+            }
 
-            continuation.onTermination = { [weak self] _ in
-                Task { await self?.removeContinuation(id: id) }
+            Task {
+                await self.addContinuation(continuation)
+                await continuation.yield(self.currentState())
+
+                continuation.onTermination = { _ in
+                    Task { await self.removeContinuation(continuation) }
+                }
             }
         }
     }
 
-    private func broadcast(_ state: State) {
-        for (_, continuation) in continuations {
-            continuation.yield(state)
+    @inline(__always)
+    private func broadcastState() {
+        let currentState = state
+        for i in 0 ..< continuationCount {
+            continuations[i].yield(currentState)
         }
     }
 
-    private func removeContinuation(id: UUID) {
-        continuations[id] = nil
+    private func addContinuation(_ continuation: AsyncStream<State>.Continuation) {
+        guard continuationCount < maxContinuations else { return }
+        if continuationCount < continuations.count {
+            continuations[continuationCount] = continuation
+        } else {
+            continuations.append(continuation)
+        }
+        continuationCount += 1
+    }
+
+    private func removeContinuation(_ targetContinuation: AsyncStream<State>.Continuation) {
+        for i in 0 ..< continuationCount where withUnsafePointer(to: continuations[i], { ptr1 in
+            withUnsafePointer(to: targetContinuation) { ptr2 in
+                ptr1 == ptr2
+            }
+        }) {
+            continuationCount -= 1
+            if i < continuationCount {
+                continuations[i] = continuations[continuationCount]
+            }
+            break
+        }
     }
 }
 

@@ -35,7 +35,7 @@ enum ShellReader {
                 "AppleSmartBattery",
             ],
             timeoutSeconds: 1.0,
-            ) ?? ""
+        ) ?? ""
 
         let designCapacity = parseKeyInt(output, key: "\"DesignCapacity\"")
         let maxCapacity = parseKeyInt(output, key: "\"AppleRawMaxCapacity\"")
@@ -44,12 +44,12 @@ enum ShellReader {
 
         let voltage_mV =
             parseKeyInt(output, key: "\"Voltage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"InstantVoltage\"", allowSign: true)
 
         let amperage_mA =
             parseKeyInt(output, key: "\"InstantAmperage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
-            ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"Amperage\"", allowSign: true)
+                ?? parseKeyInt(output, key: "\"InstantCurrent\"", allowSign: true)
 
         let serialNumber = parseKeyQuotedString(output, key: "\"Serial\"")
 
@@ -86,7 +86,7 @@ enum ShellReader {
             batteryVoltageV: batteryVoltageV,
             batteryAmperageA: batteryAmperageA,
             batteryPowerW: batteryPowerW,
-            )
+        )
     }
 
     private static func runProcess(_ executablePath: String, _ arguments: [String], timeoutSeconds: TimeInterval) async -> String? {
@@ -162,26 +162,29 @@ enum ShellReader {
         }
     }
 
+    @inline(__always)
     private static func parsePercent(_ s: String) -> Int? {
         s.utf8.withContiguousStorageIfAvailable { bytes -> Int? in
             let n = bytes.count
             var i = 0
+
             while i < n {
                 if bytes[i] == 37 {
                     var j = i
                     var v = 0
                     var mul = 1
-                    var any = false
-                    while j > 0 {
+                    var digitCount = 0
+
+                    while j > 0, digitCount < 3 {
                         j &-= 1
                         let d = Int(bytes[j]) - 48
-                        if d < 0 || d > 9 { break }
-                        any = true
+                        guard d >= 0, d <= 9 else { break }
                         v &+= d * mul
                         mul &*= 10
-                        if mul > 1000 { break }
+                        digitCount &+= 1
                     }
-                    if any { return v }
+
+                    if digitCount > 0 { return v }
                 }
                 i &+= 1
             }
@@ -189,52 +192,62 @@ enum ShellReader {
         } ?? fallbackParsePercent(s)
     }
 
+    @inline(__always)
     private static func fallbackParsePercent(_ s: String) -> Int? {
-        var last = 0
-        var any = false
-        for u in s.utf8 {
-            if u == 37 { return any ? last : nil }
-            let d = Int(u) - 48
-            if d >= 0, d <= 9 {
-                any = true
-                last = min(999, last * 10 + d)
+        var accumulator = 0
+        var hasDigits = false
+
+        for byte in s.utf8 {
+            if byte == 37 {
+                return hasDigits ? accumulator : nil
+            }
+
+            let digit = Int(byte) - 48
+            if digit >= 0, digit <= 9 {
+                hasDigits = true
+                accumulator = min(999, accumulator * 10 + digit)
             } else {
-                any = false
-                last = 0
+                hasDigits = false
+                accumulator = 0
             }
         }
         return nil
     }
 
+    @inline(__always)
     private static func parseKeyInt(_ s: String, key: String, allowSign: Bool = false) -> Int? {
         guard let keyRange = s.range(of: key) else { return nil }
         let tail = s[keyRange.upperBound...]
 
-        let result = tail.utf8.withContiguousStorageIfAvailable { bytes in
-            var i = 0
+        let result = tail.utf8.withContiguousStorageIfAvailable { bytes -> (Int, Bool) in
             let n = bytes.count
-            while i < n {
-                let c = bytes[i]
-                if c == 61 { i &+= 1; break }
+            var i = 0
+
+            while i < n, bytes[i] != 61 {
                 i &+= 1
             }
-            while i < n {
-                let c = bytes[i]
-                if c != 9, c != 10, c != 13, c != 32 { break }
+            if i < n { i &+= 1 }
+
+            while i < n, bytes[i] == 9 || bytes[i] == 10 || bytes[i] == 13 || bytes[i] == 32 {
                 i &+= 1
             }
-            var sign = 1
-            if allowSign, i < n, bytes[i] == 45 { sign = -1; i &+= 1 }
+
+            guard i < n else { return (0, false) }
+
+            let sign = (allowSign && bytes[i] == 45) ? -1 : 1
+            if allowSign, bytes[i] == 45 || bytes[i] == 43 { i &+= 1 }
+
             var v = 0
-            var any = false
-            while i < n {
+            var digitCount = 0
+            while i < n, digitCount < 10 {
                 let d = Int(bytes[i]) - 48
-                if d < 0 || d > 9 { break }
-                any = true
+                guard d >= 0, d <= 9 else { break }
                 v = v &* 10 &+ d
+                digitCount &+= 1
                 i &+= 1
             }
-            return any ? (v * sign, true) : (0, false)
+
+            return digitCount > 0 ? (v * sign, true) : (0, false)
         }
 
         if let (value, success) = result, success {

@@ -6,25 +6,25 @@ struct TelemetryClient: Sendable {
         case .smcBridge:
             let smc = SMCReader().readTelemetry()
 
-            var snapshot = TelemetrySnapshot(
+            var snapshot = TelemetrySnapshot.create(
                 timestamp: Date(),
-                telemetryError: nil,
-                chargeLimitPercent: nil,
                 batteryPercent: nil,
-                isCharging: nil,
-                designCapacity_mAh: nil,
-                maxCapacity_mAh: nil,
-                cycleCount: smc.batteryCycleCount,
-                temperatureC: smc.batteryTemperatureC,
-                serialNumber: nil,
+                isCharging: false,
+                chargeLimitPercent: nil,
+                adapterPowerW: smc.adapterPowerW,
+                systemLoadW: smc.systemLoadW,
+                batteryPowerW: smc.batteryPowerW,
                 batteryVoltageV: smc.batteryVoltageV,
                 batteryAmperageA: smc.batteryAmperageA,
                 adapterVoltageV: smc.adapterVoltageV,
                 adapterAmperageA: smc.adapterAmperageA,
-                adapterPowerW: smc.adapterPowerW,
-                systemLoadW: smc.systemLoadW,
-                batteryPowerW: smc.batteryPowerW,
-                )
+                designCapacity_mAh: nil,
+                maxCapacity_mAh: nil,
+                cycleCount: smc.batteryCycleCount,
+                temperatureC: smc.batteryTemperatureC,
+                telemetryError: nil,
+                serialNumber: nil,
+            )
 
             let smcHasAny =
                 snapshot.batteryVoltageV != nil || snapshot.batteryAmperageA != nil || snapshot.batteryPowerW != nil ||
@@ -45,16 +45,16 @@ struct TelemetryClient: Sendable {
 
                 let p = t.power
 
-                snapshot.chargeLimitPercent = limitPercent
-                snapshot.isCharging = snapshot.isCharging ?? isCharging
-                snapshot.batteryPercent = snapshot.batteryPercent ?? percent
-                snapshot.cycleCount = snapshot.cycleCount ?? p?.battery.cycleCount
+                snapshot.setChargeLimitPercent(limitPercent)
+                snapshot.isCharging = snapshot.isCharging || isCharging
+                snapshot.setBatteryPercent(snapshot.batteryPercentInt ?? percent)
+                snapshot.setCycleCount(snapshot.cycleCountInt ?? p?.battery.cycleCount)
 
-                snapshot.adapterVoltageV = snapshot.adapterVoltageV ?? p?.adapter.inputVoltage
-                snapshot.adapterAmperageA = snapshot.adapterAmperageA ?? p?.adapter.inputAmperage
-                snapshot.adapterPowerW = snapshot.adapterPowerW ?? p?.calculations.ACPower
-                snapshot.systemLoadW = snapshot.systemLoadW ?? p?.calculations.systemPower
-                snapshot.batteryPowerW = snapshot.batteryPowerW ?? p?.calculations.batteryPower
+                snapshot.adapterVoltageV = snapshot.adapterVoltageV ?? p?.adapter.inputVoltage.map(Float32.init)
+                snapshot.adapterAmperageA = snapshot.adapterAmperageA ?? p?.adapter.inputAmperage.map(Float32.init)
+                snapshot.adapterPowerW = snapshot.adapterPowerW ?? p?.calculations.ACPower.map(Float32.init)
+                snapshot.systemLoadW = snapshot.systemLoadW ?? p?.calculations.systemPower.map(Float32.init)
+                snapshot.batteryPowerW = snapshot.batteryPowerW ?? p?.calculations.batteryPower.map(Float32.init)
             } catch {
                 if !smcHasAny {
                     snapshot.telemetryError = "SMC and batt telemetry unavailable: \(BattReader.humanReadable(error: error))"
@@ -68,7 +68,7 @@ struct TelemetryClient: Sendable {
                 snapshot.temperatureC == nil ||
                 snapshot.cycleCount == nil ||
                 snapshot.batteryPercent == nil ||
-                snapshot.isCharging == nil
+                !snapshot.isCharging
 
             if needsLegacy {
                 async let legacyDetails = ShellReader.readBatteryDetails()
@@ -77,22 +77,22 @@ struct TelemetryClient: Sendable {
                 let d = await legacyDetails
                 let iokit = await iokitSummary
 
-                snapshot.designCapacity_mAh = snapshot.designCapacity_mAh ?? d.designCapacity_mAh
-                snapshot.maxCapacity_mAh = snapshot.maxCapacity_mAh ?? d.maxCapacity_mAh
+                snapshot.setDesignCapacity(snapshot.designCapacityInt ?? d.designCapacity_mAh)
+                snapshot.setMaxCapacity(snapshot.maxCapacityInt ?? d.maxCapacity_mAh)
                 snapshot.serialNumber = snapshot.serialNumber ?? d.serialNumber
-                snapshot.temperatureC = snapshot.temperatureC ?? d.temperatureC
-                snapshot.cycleCount = snapshot.cycleCount ?? d.cycleCount
+                snapshot.temperatureC = snapshot.temperatureC ?? d.temperatureC.map(Float32.init)
+                snapshot.setCycleCount(snapshot.cycleCountInt ?? d.cycleCount)
 
-                snapshot.batteryVoltageV = snapshot.batteryVoltageV ?? d.batteryVoltageV
-                snapshot.batteryAmperageA = snapshot.batteryAmperageA ?? d.batteryAmperageA
-                snapshot.batteryPowerW = snapshot.batteryPowerW ?? d.batteryPowerW
+                snapshot.batteryVoltageV = snapshot.batteryVoltageV ?? d.batteryVoltageV.map(Float32.init)
+                snapshot.batteryAmperageA = snapshot.batteryAmperageA ?? d.batteryAmperageA.map(Float32.init)
+                snapshot.batteryPowerW = snapshot.batteryPowerW ?? d.batteryPowerW.map(Float32.init)
 
-                snapshot.batteryPercent = snapshot.batteryPercent ?? iokit.batteryPercent
-                snapshot.isCharging = snapshot.isCharging ?? iokit.isCharging
+                snapshot.setBatteryPercent(snapshot.batteryPercentInt ?? iokit.batteryPercent)
+                snapshot.isCharging = snapshot.isCharging || (iokit.isCharging == true)
             }
 
             let hasAny =
-                snapshot.batteryPercent != nil || snapshot.isCharging != nil ||
+                snapshot.batteryPercent != nil || snapshot.isCharging ||
                 snapshot.designCapacity_mAh != nil || snapshot.maxCapacity_mAh != nil ||
                 snapshot.cycleCount != nil || snapshot.temperatureC != nil || snapshot.serialNumber != nil ||
                 snapshot.batteryVoltageV != nil || snapshot.batteryAmperageA != nil || snapshot.batteryPowerW != nil ||

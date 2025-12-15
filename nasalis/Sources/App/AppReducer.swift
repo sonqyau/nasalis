@@ -1,8 +1,8 @@
 import Foundation
 
+@inline(__always)
 let appReducer: Reducer<AppState, AppAction> = { state, action in
-    switch action {
-    case let .telemetryUpdated(snapshot):
+    if case let .telemetryUpdated(snapshot) = action {
         state.telemetry = snapshot
     }
 }
