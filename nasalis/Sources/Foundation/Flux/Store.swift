@@ -1,6 +1,6 @@
 import Foundation
 
-actor AppStore<State: Sendable, Action: Sendable> {
+actor Store<State: Sendable, Action: Sendable> {
     private var state: State
     private let reducer: Reducer<State, Action>
 
@@ -43,4 +43,4 @@ actor AppStore<State: Sendable, Action: Sendable> {
     }
 }
 
-typealias AppStoreType = AppStore<AppState, AppAction>
+typealias Reducer<State, Action> = @Sendable (_ state: inout State, _ action: Action) -> Void

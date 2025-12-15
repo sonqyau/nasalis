@@ -1,29 +1,44 @@
 import SwiftUI
 
 struct MainView: View {
-    let feature: MainFeature
+    @ObservedObject private var output: MainState
+    private let input: BatteryInput
 
-    @State private var state: AppState = .init()
+    init(viewModel: MainViewModel) {
+        output = viewModel.output
+        input = viewModel.input
+    }
 
     var body: some View {
         Form {
             Section {
-                PowerView(
-                    adapterPowerW: state.telemetry.adapterPowerW,
-                    batteryPowerW: state.telemetry.batteryPowerW,
-                    systemLoadW: state.telemetry.systemLoadW,
-                    isCharging: state.telemetry.isCharging,
-                    )
-                .padding(.vertical, 4)
+                PowerFlowView(telemetry: output.telemetry)
+                    .padding(.vertical, 4)
             } header: {
                 Label("Power flow", systemImage: "bolt")
             }
 
             Section {
-                infoGrid
+                TelemetryGridView(telemetry: output.telemetry)
                     .padding(.vertical, 4)
             } header: {
-                Label("Telemetry", systemImage: "gauge")
+                HStack {
+                    Label("Telemetry", systemImage: "gauge")
+                    Spacer()
+                    if output.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+            }
+
+            if let error = output.error {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundColor(.red)
+                } header: {
+                    Label("Error", systemImage: "xmark.circle")
+                }
             }
         }
         .formStyle(.grouped)
@@ -31,14 +46,29 @@ struct MainView: View {
         .frame(width: 360)
         .fixedSize(horizontal: false, vertical: true)
         .background(.regularMaterial)
-        .task {
-            for await s in feature.state {
-                state = s
-            }
+        .refreshable {
+            input.refreshRequested()
         }
     }
+}
 
-    private var infoGrid: some View {
+private struct PowerFlowView: View {
+    let telemetry: TelemetrySnapshot
+
+    var body: some View {
+        PowerView(
+            adapterPowerW: telemetry.adapterPowerW,
+            batteryPowerW: telemetry.batteryPowerW,
+            systemLoadW: telemetry.systemLoadW,
+            isCharging: telemetry.isCharging,
+            )
+    }
+}
+
+private struct TelemetryGridView: View {
+    let telemetry: TelemetrySnapshot
+
+    var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
             GridRow {
                 label("Battery")
@@ -50,15 +80,15 @@ struct MainView: View {
             }
             GridRow {
                 label("Cycle")
-                value(intString(state.telemetry.cycleCount))
+                value(intString(telemetry.cycleCount))
             }
             GridRow {
                 label("Temperature")
-                value(tempString(state.telemetry.temperatureC))
+                value(tempString(telemetry.temperatureC))
             }
             GridRow {
                 label("Serial")
-                value(state.telemetry.serialNumber ?? "--")
+                value(telemetry.serialNumber ?? "--")
             }
 
             GridRow {
@@ -70,34 +100,34 @@ struct MainView: View {
 
             GridRow {
                 label("Battery Power")
-                value(watts(absOrNil(state.telemetry.batteryPowerW)))
+                value(watts(absOrNil(telemetry.batteryPowerW)))
             }
             GridRow {
                 label("Battery Current")
-                value(amps(absOrNil(state.telemetry.batteryAmperageA)))
+                value(amps(absOrNil(telemetry.batteryAmperageA)))
             }
             GridRow {
                 label("Battery Voltage")
-                value(volts(state.telemetry.batteryVoltageV))
+                value(volts(telemetry.batteryVoltageV))
             }
 
             DividerRow()
 
             GridRow {
                 label("System Load")
-                value(watts(state.telemetry.systemLoadW))
+                value(watts(telemetry.systemLoadW))
             }
             GridRow {
                 label("Adapter Power")
-                value(watts(state.telemetry.adapterPowerW))
+                value(watts(telemetry.adapterPowerW))
             }
             GridRow {
                 label("Adapter Current")
-                value(amps(state.telemetry.adapterAmperageA))
+                value(amps(telemetry.adapterAmperageA))
             }
             GridRow {
                 label("Adapter Voltage")
-                value(volts(state.telemetry.adapterVoltageV))
+                value(volts(telemetry.adapterVoltageV))
             }
         }
         .padding(.horizontal, 12)
@@ -142,8 +172,8 @@ struct MainView: View {
     }
 
     private var batterySummary: String {
-        let percent = state.telemetry.batteryPercent
-        let charging = state.telemetry.isCharging
+        let percent = telemetry.batteryPercent
+        let charging = telemetry.isCharging
 
         var parts: [String] = []
         if let percent { parts.append("\(percent)%") }
@@ -155,8 +185,8 @@ struct MainView: View {
 
     private var healthSummary: String {
         guard
-            let max = state.telemetry.maxCapacity_mAh,
-            let design = state.telemetry.designCapacity_mAh,
+            let max = telemetry.maxCapacity_mAh,
+            let design = telemetry.designCapacity_mAh,
             design > 0
         else {
             return "--"
@@ -167,7 +197,7 @@ struct MainView: View {
     }
 
     private var chargeLimitSummary: String {
-        guard let v = state.telemetry.chargeLimitPercent else {
+        guard let v = telemetry.chargeLimitPercent else {
             return "Requires batt daemon"
         }
         return "\(v)%"

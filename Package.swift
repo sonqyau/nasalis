@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         .target(
             name: "SMCBridge",
-            path: "nasalis/Resources/SMCBridge",
+            path: "nasalis/SMCBridge",
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("IOKit"),
@@ -26,8 +26,7 @@ let package = Package(
             ],
             path: "nasalis/Sources",
             resources: [
-                .process("../Resources/Assets.xcassets"),
-                .process("../Resources/Localizations"),
+                .process("../Resources"),
             ],
         ),
     ],
