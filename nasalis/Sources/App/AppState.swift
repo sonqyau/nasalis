@@ -2,17 +2,25 @@ import Foundation
 
 struct AppState: Sendable, Equatable {
     var telemetry: TelemetrySnapshot
+    var systemMetrics: SystemMetrics
+    var launchAtLogin: Bool
 
     @inline(__always)
-    init(telemetry: TelemetrySnapshot = .empty) {
+    init(
+        telemetry: TelemetrySnapshot = .empty,
+        systemMetrics: SystemMetrics = .empty,
+        launchAtLogin: Bool = false,
+    ) {
         self.telemetry = telemetry
+        self.systemMetrics = systemMetrics
+        self.launchAtLogin = launchAtLogin
     }
 }
 
 struct TelemetrySnapshot: Sendable, Equatable {
     let timestamp: Date
     var batteryPercent: UInt8?
-    var isCharging: Bool
+    var isBatteryCharging: Bool
     var chargeLimitPercent: UInt8?
 
     var adapterPowerW: Float32?
@@ -29,13 +37,13 @@ struct TelemetrySnapshot: Sendable, Equatable {
     var cycleCount: UInt16?
     var temperatureC: Float32?
 
-    var telemetryError: String?
+    var telemetryError: NSError?
     var serialNumber: String?
 
     static let empty: TelemetrySnapshot = Self(
         timestamp: .distantPast,
         batteryPercent: nil,
-        isCharging: false,
+        isBatteryCharging: false,
         chargeLimitPercent: nil,
         adapterPowerW: nil,
         systemLoadW: nil,
@@ -56,7 +64,7 @@ struct TelemetrySnapshot: Sendable, Equatable {
     static func create(
         timestamp: Date,
         batteryPercent: Int? = nil,
-        isCharging: Bool = false,
+        isBatteryCharging: Bool = false,
         chargeLimitPercent: Int? = nil,
         adapterPowerW: Double? = nil,
         systemLoadW: Double? = nil,
@@ -69,13 +77,13 @@ struct TelemetrySnapshot: Sendable, Equatable {
         maxCapacity_mAh: Int? = nil,
         cycleCount: Int? = nil,
         temperatureC: Double? = nil,
-        telemetryError: String? = nil,
+        telemetryError: NSError? = nil,
         serialNumber: String? = nil,
     ) -> Self {
         Self(
             timestamp: timestamp,
             batteryPercent: batteryPercent.map { UInt8(clamping: $0) },
-            isCharging: isCharging,
+            isBatteryCharging: isBatteryCharging,
             chargeLimitPercent: chargeLimitPercent.map { UInt8(clamping: $0) },
             adapterPowerW: adapterPowerW.map(Float32.init),
             systemLoadW: systemLoadW.map(Float32.init),
@@ -97,7 +105,7 @@ struct TelemetrySnapshot: Sendable, Equatable {
     init(
         timestamp: Date,
         batteryPercent: UInt8?,
-        isCharging: Bool,
+        isBatteryCharging: Bool,
         chargeLimitPercent: UInt8?,
         adapterPowerW: Float32?,
         systemLoadW: Float32?,
@@ -110,12 +118,12 @@ struct TelemetrySnapshot: Sendable, Equatable {
         maxCapacity_mAh: UInt16?,
         cycleCount: UInt16?,
         temperatureC: Float32?,
-        telemetryError: String?,
+        telemetryError: NSError?,
         serialNumber: String?,
     ) {
         self.timestamp = timestamp
         self.batteryPercent = batteryPercent
-        self.isCharging = isCharging
+        self.isBatteryCharging = isBatteryCharging
         self.chargeLimitPercent = chargeLimitPercent
         self.adapterPowerW = adapterPowerW
         self.systemLoadW = systemLoadW

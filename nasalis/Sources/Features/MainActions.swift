@@ -1,15 +1,19 @@
+import Combine
 import Foundation
 
 enum MainActions: Sendable, Equatable {
     case viewAppeared
     case viewDisappeared
     case telemetryUpdated(TelemetrySnapshot)
+    case systemMetricsUpdated(SystemMetrics)
     case refreshRequested
+    case launchAtLoginToggled(Bool)
 }
 
 @MainActor
 final class BatteryInput: ViewModelInput {
     private let actionChannel = ActionChannel<MainActions>()
+    private var cancellables = Set<AnyCancellable>()
 
     private static let viewAppearedAction = MainActions.viewAppeared
     private static let viewDisappearedAction = MainActions.viewDisappeared
@@ -18,6 +22,11 @@ final class BatteryInput: ViewModelInput {
     @inline(__always)
     var actions: AsyncStream<MainActions> {
         actionChannel.stream
+    }
+
+    @inline(__always)
+    var publisher: AnyPublisher<MainActions, Never> {
+        actionChannel.publisher
     }
 
     @inline(__always)
@@ -38,5 +47,15 @@ final class BatteryInput: ViewModelInput {
     @inline(__always)
     func refreshRequested() {
         actionChannel.send(Self.refreshRequestedAction)
+    }
+
+    @inline(__always)
+    func launchAtLoginToggled(_ enabled: Bool) {
+        actionChannel.send(.launchAtLoginToggled(enabled))
+    }
+
+    func finish() {
+        actionChannel.finish()
+        cancellables.removeAll()
     }
 }

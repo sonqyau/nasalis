@@ -16,8 +16,8 @@ struct StatusView: View {
 
     var body: some View {
         let isLoading = output.isLoading
-        let iconName = output.batteryIconName
-        let accessibilityText = output.accessibilityText
+        let iconName = output.batteryStatusIconName
+        let accessibilityText = output.accessibilityLabel
 
         return Image(systemName: iconName)
             .imageScale(Self.imageScale)

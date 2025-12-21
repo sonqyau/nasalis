@@ -11,6 +11,8 @@ This project is provided solely for the author's personal study and exploration 
 
 - [charlie0129/batt](https://github.com/charlie0129/batt) (GPL-2.0)
 - [clzoc/BattGUI](https://github.com/clzoc/BattGUI) (GPL-3.0)
+- [nobbbbby/Alertivity](https://github.com/nobbbbby/Alertivity) (GPL-3.0)
+- [sindresorhus/LaunchAtLogin-Modern](https://github.com/sindresorhus/LaunchAtLogin-Modern) (MIT)
 
 ## License
 

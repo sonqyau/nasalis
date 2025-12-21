@@ -127,6 +127,11 @@ final class AppComposition: NSObject {
 
     private static let contextMenu: NSMenu = {
         let menu = NSMenu()
+
+        let launchAtLogin = NSMenuItem(title: "Launch at Login", action: #selector(AppComposition.toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLogin.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        menu.addItem(launchAtLogin)
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "Quit", action: #selector(AppComposition.quit), keyEquivalent: "q")
@@ -136,6 +141,10 @@ final class AppComposition: NSObject {
         return menu
     }()
 
+    @objc private func toggleLaunchAtLogin() {
+        mainViewModel.input.launchAtLoginToggled(!mainViewModel.output.launchAtLogin)
+    }
+
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
     }
@@ -144,5 +153,9 @@ final class AppComposition: NSObject {
 extension AppComposition: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         menu.items.forEach { $0.target = self }
+
+        if let launchAtLoginItem = menu.items.first(where: { $0.action == #selector(toggleLaunchAtLogin) }) {
+            launchAtLoginItem.state = mainViewModel.output.launchAtLogin ? .on : .off
+        }
     }
 }

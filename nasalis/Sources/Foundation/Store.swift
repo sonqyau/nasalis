@@ -1,3 +1,4 @@
+@preconcurrency import Combine
 import Foundation
 
 actor Store<State: Sendable, Action: Sendable> {
@@ -6,12 +7,14 @@ actor Store<State: Sendable, Action: Sendable> {
 
     private var continuations: ContiguousArray<AsyncStream<State>.Continuation> = []
     private var continuationCount: Int = 0
+    private let subject: CurrentValueSubject<State, Never>
 
     private let maxContinuations: Int = 16
 
     init(initialState: State, reducer: @escaping Reducer<State, Action>) {
         state = initialState
         self.reducer = reducer
+        subject = CurrentValueSubject<State, Never>(initialState)
         continuations.reserveCapacity(maxContinuations)
     }
 
@@ -21,9 +24,13 @@ actor Store<State: Sendable, Action: Sendable> {
     }
 
     @inline(__always)
-    func dispatch(_ action: Action) {
+    func dispatch(_ action: Action) async {
         reducer(&state, action)
         broadcastState()
+        let currentState = state
+        await MainActor.run {
+            subject.send(currentState)
+        }
     }
 
     func states() -> AsyncStream<State> {
@@ -41,6 +48,12 @@ actor Store<State: Sendable, Action: Sendable> {
                     Task { await self.removeContinuation(continuation) }
                 }
             }
+        }
+    }
+
+    var publisher: AnyPublisher<State, Never> {
+        get async {
+            subject.eraseToAnyPublisher()
         }
     }
 

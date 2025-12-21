@@ -12,7 +12,7 @@ struct PowerView: View {
     let adapterPowerW: Double?
     let batteryPowerW: Double?
     let systemLoadW: Double?
-    let isCharging: Bool
+    let isBatteryCharging: Bool
 
     static let iconSize: CGFloat = 16
     static let flowHeight: CGFloat = 40

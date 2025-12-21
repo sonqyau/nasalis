@@ -3,6 +3,7 @@ import SwiftUI
 struct MainView: View {
     @ObservedObject private var output: MainState
     private let input: BatteryInput
+    private let viewModel: MainViewModel
 
     private static let frameSize = CGSize(width: 360, height: 0)
     private static let sectionPadding = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
@@ -10,12 +11,13 @@ struct MainView: View {
     static let gridPadding = EdgeInsets(top: 0, leading: 12, bottom: 12, trailing: 12)
 
     init(viewModel: MainViewModel) {
+        self.viewModel = viewModel
         output = viewModel.output
         input = viewModel.input
     }
 
     var body: some View {
-        let telemetry = output.telemetry
+        let telemetry = output.currentTelemetry
         let hasError = output.error != nil
 
         return Form {
@@ -27,7 +29,7 @@ struct MainView: View {
             }
 
             Section {
-                TelemetryGridView(telemetry: telemetry)
+                TelemetryGridView(telemetry: telemetry, systemMetrics: output.systemMetrics)
                     .padding(Self.sectionPadding)
             } header: {
                 TelemetryHeader(isLoading: output.isLoading)
@@ -35,7 +37,9 @@ struct MainView: View {
 
             if hasError {
                 Section {
-                    ErrorView(error: output.error ?? "")
+                    if let error = output.error {
+                        ErrorView(error: error)
+                    }
                 } header: {
                     ErrorHeader()
                 }
@@ -52,6 +56,18 @@ struct MainView: View {
     }
 }
 
+private struct SystemMetricsHeader: View {
+    var body: some View {
+        Label("System Metrics", systemImage: "chart.line.uptrend.xyaxis")
+    }
+}
+
+private struct SettingsHeader: View {
+    var body: some View {
+        Label("Settings", systemImage: "gearshape")
+    }
+}
+
 private struct PowerFlowView: View {
     let telemetry: TelemetrySnapshot
 
@@ -60,7 +76,7 @@ private struct PowerFlowView: View {
             adapterPowerW: telemetry.adapterPowerDouble,
             batteryPowerW: telemetry.batteryPowerDouble,
             systemLoadW: telemetry.systemLoadDouble,
-            isCharging: telemetry.isCharging,
+            isBatteryCharging: telemetry.isBatteryCharging,
         )
     }
 }
@@ -86,10 +102,10 @@ private struct TelemetryHeader: View {
 }
 
 private struct ErrorView: View {
-    let error: String
+    let error: NSError
 
     var body: some View {
-        Label(error, systemImage: "exclamationmark.triangle")
+        Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
             .foregroundColor(.red)
     }
 }
@@ -102,9 +118,10 @@ private struct ErrorHeader: View {
 
 private struct TelemetryGridView: View {
     let telemetry: TelemetrySnapshot
+    let systemMetrics: SystemMetrics
 
     private var batteryPercent: Int? { telemetry.batteryPercentInt }
-    private var isCharging: Bool { telemetry.isCharging }
+    private var isBatteryCharging: Bool { telemetry.isBatteryCharging }
     private var cycleCount: Int? { telemetry.cycleCountInt }
     private var temperature: Double? { telemetry.temperatureDouble }
     private var chargeLimitPercent: Int? { telemetry.chargeLimitPercentInt }
@@ -123,7 +140,7 @@ private struct TelemetryGridView: View {
         Grid(alignment: .leading, horizontalSpacing: MainView.gridSpacing.h, verticalSpacing: MainView.gridSpacing.v) {
             BatteryInfoRows(
                 batteryPercent: batteryPercent,
-                isCharging: isCharging,
+                isBatteryCharging: isBatteryCharging,
                 maxCapacity: maxCapacity,
                 designCapacity: designCapacity,
                 cycleCount: cycleCount,
@@ -143,14 +160,45 @@ private struct TelemetryGridView: View {
                 adapterCurrent: adapterCurrent,
                 adapterVoltage: adapterVoltage,
             )
+
+            DividerRow()
+
+            SystemMetricsRows(systemMetrics: systemMetrics)
         }
         .padding(MainView.gridPadding)
     }
 }
 
+private struct SystemMetricsRows: View {
+    let systemMetrics: SystemMetrics
+
+    var body: some View {
+        GridRow {
+            TelemetryLabel.cpu
+            TelemetryValue(text: FormattingUtils.percentage(systemMetrics.cpuUsage))
+        }
+        GridRow {
+            TelemetryLabel.memory
+            TelemetryValue(text: FormattingUtils.percentage(systemMetrics.memoryUsage))
+        }
+        if systemMetrics.network.totalBytesPerSecond > 0 {
+            GridRow {
+                TelemetryLabel.network
+                TelemetryValue(text: systemMetrics.network.formattedBytesPerSecond(systemMetrics.network.totalBytesPerSecond) + "/s")
+            }
+        }
+        if systemMetrics.disk.totalBytesPerSecond > 0 {
+            GridRow {
+                TelemetryLabel.disk
+                TelemetryValue(text: systemMetrics.disk.formattedBytesPerSecond(systemMetrics.disk.totalBytesPerSecond) + "/s")
+            }
+        }
+    }
+}
+
 private struct BatteryInfoRows: View {
     let batteryPercent: Int?
-    let isCharging: Bool
+    let isBatteryCharging: Bool
     let maxCapacity: UInt16?
     let designCapacity: UInt16?
     let cycleCount: Int?
@@ -188,7 +236,7 @@ private struct BatteryInfoRows: View {
     private var batterySummary: String {
         var parts: [String] = []
         if let batteryPercent { parts.append("\(batteryPercent)%") }
-        parts.append(isCharging ? "Charging" : "Discharging")
+        parts.append(isBatteryCharging ? "Charging" : "Discharging")
         return parts.isEmpty ? "--" : parts.joined(separator: " · ")
     }
 
@@ -281,6 +329,10 @@ private struct TelemetryLabel: View {
     static let adapterPower = Self(icon: "powerplug", text: "Adapter Power")
     static let adapterCurrent = Self(icon: "minus.plus.batteryblock", text: "Adapter Current")
     static let adapterVoltage = Self(icon: "minus.plus.and.fluid.batteryblock", text: "Adapter Voltage")
+    static let cpu = Self(icon: "cpu", text: "CPU")
+    static let memory = Self(icon: "memorychip", text: "Memory")
+    static let network = Self(icon: "network", text: "Network")
+    static let disk = Self(icon: "internaldrive", text: "Disk")
 }
 
 private struct TelemetryValue: View {
@@ -334,5 +386,10 @@ private enum FormattingUtils {
     static func volts(_ value: Double?) -> String {
         guard let value else { return "--" }
         return String(format: "%.2f V", value)
+    }
+
+    @inline(__always)
+    static func percentage(_ value: Double) -> String {
+        String(format: "%.0f%%", value * 100)
     }
 }
