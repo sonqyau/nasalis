@@ -13,39 +13,39 @@ final class ActionChannel<Action: Sendable>: @unchecked Sendable {
 
     init() {
         var localContinuation: AsyncStream<Action>.Continuation?
-        
+
         let asyncStream = AsyncStream<Action> { continuation in
             localContinuation = continuation
         }
-        
+
         let actionPublisher = subject.eraseToAnyPublisher()
-        
-        self.stream = asyncStream
-        self.publisher = actionPublisher
-        
+
+        stream = asyncStream
+        publisher = actionPublisher
+
         lock.lock()
         continuation = localContinuation
         isStreamActive = true
         lock.unlock()
-        
+
         localContinuation?.onTermination = { [weak self] _ in
             self?.lock.lock()
             self?.isStreamActive = false
             self?.continuation = nil
             self?.lock.unlock()
         }
-        
+
         subject
             .sink { [weak self] action in
                 self?.forwardToStream(action)
             }
             .store(in: &cancellables)
     }
-    
+
     private func forwardToStream(_ action: Action) {
         lock.lock()
         defer { lock.unlock() }
-        
+
         if isStreamActive {
             continuation?.yield(action)
         }
@@ -60,7 +60,7 @@ final class ActionChannel<Action: Sendable>: @unchecked Sendable {
     func finish() {
         lock.lock()
         defer { lock.unlock() }
-        
+
         subject.send(completion: .finished)
         continuation?.finish()
         isStreamActive = false

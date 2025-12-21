@@ -45,7 +45,7 @@ final class MainViewModel: ViewModelProtocol {
         setupStateSubscription()
         setupPowerStateMonitoring()
         setupSystemMonitoring()
-        
+
         // startTelemetryPolling()
     }
 

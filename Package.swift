@@ -17,7 +17,7 @@ let package = Package(
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("IOKit"),
-            ]
+            ],
         ),
         .executableTarget(
             name: "NasalisApp",
@@ -34,6 +34,6 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("IOKit"),
             ],
-        )
-    ]
+        ),
+    ],
 )

@@ -22,7 +22,7 @@ struct SMCReader: Sendable {
             batteryAmperageA: Self.doubleOrNil(data.batteryAmperageA),
             batteryPowerW: Self.doubleOrNil(data.batteryPowerW),
             batteryTemperatureC: Self.temperatureOrNil(data.batteryTemperatureC),
-            batteryCycleCount: Self.intOrNil(data.batteryCycleCount)
+            batteryCycleCount: Self.intOrNil(data.batteryCycleCount),
         )
     }
 
