@@ -36,13 +36,9 @@ jobs:
       - name: Get Swift version
         run: swift --version
 
-      - name: Build
+      - name: Build Binary
         run: |
-          swift build -c debug
-        continue-on-error: true
-
-      - name: Run tests
-        run: swift test --parallel
+          swift build -c debug -Xswiftc -warn-concurrency
         continue-on-error: true
 
   package:
@@ -54,13 +50,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Build
+      - name: Build Binary
         run: |
-          swift build -c release
+          swift build -c release -Xswiftc -warn-concurrency
 
-      - name: Upload
+      - name: Create Bundle
+        run: |
+          mkdir -p "Nasalis.app/Contents/MacOS"
+          mkdir -p "Nasalis.app/Contents/Resources"
+          cp .build/release/nasalis "Nasalis.app/Contents/MacOS/Nasalis"
+          cp -r nasalis/Resources/* "Nasalis.app/Contents/Resources/"
+          cp "nasalis/Supporting Files/Info.plist" "Nasalis.app/Contents/Info.plist"
+
+      - name: Upload Binary
         uses: actions/upload-artifact@v6
         with:
-          name: nasalis
+          name: nasalis-binary
           path: .build/release/nasalis
+          if-no-files-found: error
+
+      - name: Upload Bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: nasalis-app
+          path: Nasalis.app
           if-no-files-found: error

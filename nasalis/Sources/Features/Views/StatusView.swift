@@ -23,7 +23,7 @@ struct StatusView: View {
             .imageScale(Self.imageScale)
             .symbolRenderingMode(Self.symbolMode)
             .opacity(isLoading ? Self.loadingOpacity : Self.normalOpacity)
-            // .frame(width: 22, height: 22)
+            .frame(width: 22, height: 22)
             .contentShape(Rectangle())
             .task {
                 input.viewAppeared()

@@ -129,7 +129,8 @@ final class AppComposition: NSObject {
         let menu = NSMenu()
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit Nasalis", action: #selector(AppComposition.quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit", action: #selector(AppComposition.quit), keyEquivalent: "q")
+        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quit)
 
         return menu
