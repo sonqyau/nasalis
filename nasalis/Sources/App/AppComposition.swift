@@ -16,7 +16,7 @@ final class AppComposition: NSObject {
 
     override init() {
         store = Store(initialState: AppState(), reducer: appReducer)
-        mainViewModel = NasalisApp.MainViewModel(store: store)
+        mainViewModel = nasalisApp.MainViewModel(store: store)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()

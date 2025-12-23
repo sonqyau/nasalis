@@ -8,7 +8,7 @@ let package = Package(
         .macOS(.v26),
     ],
     products: [
-        .executable(name: "nasalis", targets: ["NasalisApp"]),
+        .executable(name: "nasalis", targets: ["nasalisApp"]),
     ],
     targets: [
         .target(
@@ -20,7 +20,7 @@ let package = Package(
             ],
         ),
         .executableTarget(
-            name: "NasalisApp",
+            name: "nasalisApp",
             dependencies: [
                 "SMCBridge",
             ],

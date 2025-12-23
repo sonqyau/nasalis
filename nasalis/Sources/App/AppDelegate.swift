@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SMCReader.invalidateCache()
         }
 
-        appComposition = NasalisApp.AppComposition()
+        appComposition = nasalisApp.AppComposition()
 
         NSApp.setActivationPolicy(.accessory)
 
