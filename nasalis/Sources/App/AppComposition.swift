@@ -3,159 +3,167 @@ import SwiftUI
 
 @MainActor
 final class AppComposition: NSObject {
-    private let statusItem: NSStatusItem
-    private let popover: NSPopover
-    private let statusHostingView: NSHostingView<StatusView>
-    private let store: Store<AppState, AppAction>
-    private let mainViewModel: MainViewModel
-    private let popoverController: NSHostingController<MainView>
+  private let statusItem: NSStatusItem
+  private let popover: NSPopover
+  private let statusHostingView: NSHostingView<StatusView>
+  private let store: Store<AppState, AppAction>
+  private let mainViewModel: MainViewModel
+  private let popoverController: NSHostingController<MainView>
 
-    private static let popoverSize = NSSize(width: 360, height: 520)
-    private static let minPopoverHeight: CGFloat = 260
-    private static let screenMargin: CGFloat = 40
+  private static let popoverSize = NSSize(width: 360, height: 520)
+  private static let minPopoverHeight: CGFloat = 260
+  private static let screenMargin: CGFloat = 40
 
-    override init() {
-        store = Store(initialState: AppState(), reducer: appReducer)
-        mainViewModel = nasalisApp.MainViewModel(store: store)
+  override init() {
+    store = Store(initialState: AppState(), reducer: appReducer)
+    mainViewModel = nasalisApp.MainViewModel(store: store)
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        popover = NSPopover()
+    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    popover = NSPopover()
 
-        let statusView = StatusView(viewModel: mainViewModel)
-        statusHostingView = NSHostingView(rootView: statusView)
+    let statusView = StatusView(viewModel: mainViewModel)
+    statusHostingView = NSHostingView(rootView: statusView)
 
-        let detailView = MainView(viewModel: mainViewModel)
-        popoverController = NSHostingController(rootView: detailView)
+    let detailView = MainView(viewModel: mainViewModel)
+    popoverController = NSHostingController(rootView: detailView)
 
-        super.init()
+    super.init()
 
-        setupStatusBar()
-        setupPopover()
+    setupStatusBar()
+    setupPopover()
+  }
+
+  private func setupStatusBar() {
+    guard let button = statusItem.button else {
+      fatalError("Status item button unavailable")
     }
 
-    private func setupStatusBar() {
-        guard let button = statusItem.button else {
-            fatalError("Status item button unavailable")
-        }
+    statusHostingView.wantsLayer = true
+    statusHostingView.layer?.drawsAsynchronously = true
 
-        statusHostingView.wantsLayer = true
-        statusHostingView.layer?.drawsAsynchronously = true
+    button.image = nil
+    button.title = ""
+    button.addSubview(statusHostingView)
 
-        button.image = nil
-        button.title = ""
-        button.addSubview(statusHostingView)
+    statusHostingView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      statusHostingView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 2),
+      statusHostingView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
+      statusHostingView.topAnchor.constraint(equalTo: button.topAnchor, constant: 2),
+      statusHostingView.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -2),
+    ])
 
-        statusHostingView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            statusHostingView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 2),
-            statusHostingView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
-            statusHostingView.topAnchor.constraint(equalTo: button.topAnchor, constant: 2),
-            statusHostingView.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -2),
-        ])
+    button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    button.target = self
+    button.action = #selector(handleStatusBarClick)
 
-        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.target = self
-        button.action = #selector(handleStatusBarClick)
+    if let cell = button.cell as? NSButtonCell {
+      cell.highlightsBy = []
+    }
+  }
 
-        if let cell = button.cell as? NSButtonCell {
-            cell.highlightsBy = []
-        }
+  private func setupPopover() {
+    popover.behavior = .transient
+    popover.animates = false
+    popover.contentViewController = popoverController
+    popover.contentSize = Self.popoverSize
+
+    popoverController.view.frame = NSRect(origin: .zero, size: Self.popoverSize)
+    popoverController.view.wantsLayer = true
+    popoverController.view.layer?.drawsAsynchronously = true
+
+    if let layer = popoverController.view.layer {
+      layer.shouldRasterize = true
+      layer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 2.0
+    }
+  }
+
+  @objc private func handleStatusBarClick() {
+    guard let button = statusItem.button else { return }
+
+    if let event = NSApp.currentEvent,
+      event.type.rawValue == NSEvent.EventType.rightMouseUp.rawValue
+    {
+      showContextMenu(from: button)
+      return
     }
 
-    private func setupPopover() {
-        popover.behavior = .transient
-        popover.animates = false
-        popover.contentViewController = popoverController
-        popover.contentSize = Self.popoverSize
+    if popover.isShown {
+      popover.performClose(nil)
+    } else {
+      showPopover(relativeTo: button)
+    }
+  }
 
-        popoverController.view.frame = NSRect(origin: .zero, size: Self.popoverSize)
-        popoverController.view.wantsLayer = true
-        popoverController.view.layer?.drawsAsynchronously = true
+  private func showPopover(relativeTo button: NSStatusBarButton) {
+    guard !popover.isShown else { return }
 
-        if let layer = popoverController.view.layer {
-            layer.shouldRasterize = true
-            layer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 2.0
-        }
+    let view = popoverController.view
+    view.layoutSubtreeIfNeeded()
+    let fittingHeight = view.fittingSize.height
+
+    let finalHeight: CGFloat
+    if let screen = button.window?.screen {
+      let maxHeight = max(Self.minPopoverHeight, screen.visibleFrame.height - Self.screenMargin)
+      finalHeight = min(max(Self.minPopoverHeight, fittingHeight), maxHeight)
+    } else {
+      finalHeight = max(Self.minPopoverHeight, fittingHeight)
     }
 
-    @objc private func handleStatusBarClick() {
-        guard let button = statusItem.button else { return }
-
-        if let event = NSApp.currentEvent, event.type.rawValue == NSEvent.EventType.rightMouseUp.rawValue {
-            showContextMenu(from: button)
-            return
-        }
-
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            showPopover(relativeTo: button)
-        }
+    let newSize = NSSize(width: Self.popoverSize.width, height: finalHeight)
+    if popover.contentSize != newSize {
+      popover.contentSize = newSize
     }
 
-    private func showPopover(relativeTo button: NSStatusBarButton) {
-        guard !popover.isShown else { return }
+    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+  }
 
-        let view = popoverController.view
-        view.layoutSubtreeIfNeeded()
-        let fittingHeight = view.fittingSize.height
+  private func showContextMenu(from button: NSStatusBarButton) {
+    let menu = Self.contextMenu
+    menu.delegate = self
 
-        let finalHeight: CGFloat
-        if let screen = button.window?.screen {
-            let maxHeight = max(Self.minPopoverHeight, screen.visibleFrame.height - Self.screenMargin)
-            finalHeight = min(max(Self.minPopoverHeight, fittingHeight), maxHeight)
-        } else {
-            finalHeight = max(Self.minPopoverHeight, fittingHeight)
-        }
+    statusItem.menu = menu
+    button.performClick(nil)
+    statusItem.menu = nil
+  }
 
-        let newSize = NSSize(width: Self.popoverSize.width, height: finalHeight)
-        if popover.contentSize != newSize {
-            popover.contentSize = newSize
-        }
+  private static let contextMenu: NSMenu = {
+    let menu = NSMenu()
 
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-    }
+    let launchAtLogin = NSMenuItem(
+      title: "Start at Login", action: #selector(AppComposition.toggleLaunchAtLogin),
+      keyEquivalent: "")
+    launchAtLogin.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+    menu.addItem(launchAtLogin)
 
-    private func showContextMenu(from button: NSStatusBarButton) {
-        let menu = Self.contextMenu
-        menu.delegate = self
+    menu.addItem(.separator())
 
-        statusItem.menu = menu
-        button.performClick(nil)
-        statusItem.menu = nil
-    }
+    let quit = NSMenuItem(title: "Exit", action: #selector(AppComposition.quit), keyEquivalent: "q")
+    quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+    menu.addItem(quit)
 
-    private static let contextMenu: NSMenu = {
-        let menu = NSMenu()
+    return menu
+  }()
 
-        let launchAtLogin = NSMenuItem(title: "Launch at Login", action: #selector(AppComposition.toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLogin.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
-        menu.addItem(launchAtLogin)
+  @objc private func toggleLaunchAtLogin() {
+    mainViewModel.input.launchAtLoginToggled(!mainViewModel.output.launchAtLogin)
+  }
 
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit", action: #selector(AppComposition.quit), keyEquivalent: "q")
-        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
-        menu.addItem(quit)
-
-        return menu
-    }()
-
-    @objc private func toggleLaunchAtLogin() {
-        mainViewModel.input.launchAtLoginToggled(!mainViewModel.output.launchAtLogin)
-    }
-
-    @objc private func quit() {
-        NSApplication.shared.terminate(nil)
-    }
+  @objc private func quit() {
+    NSApplication.shared.terminate(nil)
+  }
 }
 
 extension AppComposition: NSMenuDelegate {
-    func menuWillOpen(_ menu: NSMenu) {
-        menu.items.forEach { $0.target = self }
-
-        if let launchAtLoginItem = menu.items.first(where: { $0.action == #selector(toggleLaunchAtLogin) }) {
-            launchAtLoginItem.state = mainViewModel.output.launchAtLogin ? .on : .off
-        }
+  func menuWillOpen(_ menu: NSMenu) {
+    for item in menu.items {
+      item.target = self
     }
+
+    if let launchAtLoginItem = menu.items.first(where: {
+      $0.action == #selector(toggleLaunchAtLogin)
+    }) {
+      launchAtLoginItem.state = mainViewModel.output.launchAtLogin ? .on : .off
+    }
+  }
 }

@@ -6,16 +6,16 @@ extern "C" {
 #endif
 
 typedef struct {
-    float systemPowerW;
-    float adapterPowerW;
-    float adapterVoltageV;
-    float adapterAmperageA;
-    float batteryVoltageV;
-    float batteryAmperageA;
-    float batteryPowerW;
-    float batteryTemperatureC;
-    int32_t batteryCycleCount;
-    uint64_t timestamp;
+  float systemPowerW;
+  float adapterPowerW;
+  float adapterVoltageV;
+  float adapterAmperageA;
+  float batteryVoltageV;
+  float batteryAmperageA;
+  float batteryPowerW;
+  float batteryTemperatureC;
+  int32_t batteryCycleCount;
+  uint64_t timestamp;
 } SMCBridgeData;
 
 bool SMCBridgeReadAll(SMCBridgeData *data);

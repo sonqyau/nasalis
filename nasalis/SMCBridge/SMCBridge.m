@@ -1,7 +1,7 @@
 #include <IOKit/IOKitLib.h>
 #include <mach/mach_time.h>
 #include <math.h>
-#include <pthread.h>
+#include <stdatomic.h>
 #include <sys/sysctl.h>
 
 #include "include/SMCBridge.h"
@@ -9,6 +9,8 @@
 #define SMC_CACHE_TTL_NS 100000000ULL
 #define SMC_MAX_RETRIES 3
 #define SMC_BATCH_SIZE 16
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
 
 typedef struct __attribute__((packed)) {
   uint32_t key;
@@ -34,15 +36,19 @@ typedef struct {
   uint8_t size;
 } SMCKeyInfo;
 
-static struct {
+typedef struct {
   SMCBridgeData data;
   uint64_t timestamp;
-  pthread_mutex_t mutex;
+  atomic_flag lock;
   io_connect_t connection;
   bool initialized;
-} g_smc_cache = {.mutex = PTHREAD_MUTEX_INITIALIZER,
-                 .connection = IO_OBJECT_NULL,
-                 .initialized = false};
+} smc_cache_t;
+
+static smc_cache_t g_smc_cache = {.data = {0},
+                                  .timestamp = 0,
+                                  .lock = ATOMIC_FLAG_INIT,
+                                  .connection = IO_OBJECT_NULL,
+                                  .initialized = false};
 
 static inline uint64_t mach_time_ns(void) {
   static mach_timebase_info_data_t timebase;
@@ -53,13 +59,28 @@ static inline uint64_t mach_time_ns(void) {
   return (mach_absolute_time() * timebase.numer) / timebase.denom;
 }
 
+static inline void smc_lock(void) {
+  while (atomic_flag_test_and_set_explicit(&g_smc_cache.lock,
+                                           memory_order_acquire)) {
+#if defined(__x86_64__)
+    __asm__ volatile("pause" ::: "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile("yield" ::: "memory");
+#endif
+  }
+}
+
+static inline void smc_unlock(void) {
+  atomic_flag_clear_explicit(&g_smc_cache.lock, memory_order_release);
+}
+
 static bool smc_ensure_connection(void) {
-  if (g_smc_cache.connection != IO_OBJECT_NULL)
+  if (LIKELY(g_smc_cache.connection != IO_OBJECT_NULL))
     return true;
 
   io_service_t service = IOServiceGetMatchingService(
       kIOMainPortDefault, IOServiceMatching("AppleSMC"));
-  if (!service)
+  if (UNLIKELY(!service))
     return false;
 
   IOReturn ret =
@@ -70,7 +91,7 @@ static bool smc_ensure_connection(void) {
 }
 
 static bool smc_read_raw(uint32_t key, uint8_t size, void *value) {
-  if (!smc_ensure_connection())
+  if (UNLIKELY(!smc_ensure_connection()))
     return false;
 
   SMCData input = {0}, output = {0};
@@ -84,15 +105,15 @@ static bool smc_read_raw(uint32_t key, uint8_t size, void *value) {
     IOReturn ret =
         IOConnectCallStructMethod(g_smc_cache.connection, 2, &input,
                                   sizeof(input), &output, &output_size);
-    if (ret == kIOReturnSuccess) {
-      memcpy(value, &output.value, size);
+    if (LIKELY(ret == kIOReturnSuccess)) {
+      __builtin_memcpy(value, &output.value, size);
       return true;
     }
 
     if (ret == kIOReturnNotOpen || ret == kIOReturnExclusiveAccess) {
       IOServiceClose(g_smc_cache.connection);
       g_smc_cache.connection = IO_OBJECT_NULL;
-      if (!smc_ensure_connection())
+      if (UNLIKELY(!smc_ensure_connection()))
         return false;
     }
   }
@@ -117,7 +138,7 @@ static inline bool smc_read_u8(uint32_t key, uint8_t *value) {
 
 static inline bool smc_read_fp78(uint32_t key, float *value) {
   int16_t raw;
-  if (!smc_read_i16(key, &raw))
+  if (UNLIKELY(!smc_read_i16(key, &raw)))
     return false;
   *value = (float)raw * 0.00390625f;
   return true;
@@ -129,7 +150,7 @@ static const uint32_t SMC_KEYS[] = {
 };
 
 static bool smc_read_all_data(SMCBridgeData *data) {
-  memset(data, 0, sizeof(*data));
+  __builtin_memset(data, 0, sizeof(*data));
   data->timestamp = mach_time_ns();
 
   smc_read_float(0x50535452, &data->systemPowerW);
@@ -150,15 +171,14 @@ static bool smc_read_all_data(SMCBridgeData *data) {
     data->batteryAmperageA = NAN;
   }
 
-  if (!isnan(data->batteryVoltageV) && !isnan(data->batteryAmperageA)) {
-    data->batteryPowerW = data->batteryVoltageV * data->batteryAmperageA;
-  } else {
-    data->batteryPowerW = NAN;
-  }
+  data->batteryPowerW =
+      (LIKELY(!isnan(data->batteryVoltageV) && !isnan(data->batteryAmperageA)))
+          ? data->batteryVoltageV * data->batteryAmperageA
+          : NAN;
 
   uint8_t port = 0;
   smc_read_u8(0x41432D57, &port);
-  if (port > 4)
+  if (UNLIKELY(port > 4))
     port = 0;
 
   uint32_t adapter_key = 0x44305652 + ((uint32_t)port << 16);
@@ -168,12 +188,11 @@ static bool smc_read_all_data(SMCBridgeData *data) {
     data->adapterVoltageV = NAN;
   }
 
-  if (!isnan(data->adapterPowerW) && !isnan(data->adapterVoltageV) &&
-      data->adapterVoltageV > 0.01f) {
-    data->adapterAmperageA = data->adapterPowerW / data->adapterVoltageV;
-  } else {
-    data->adapterAmperageA = NAN;
-  }
+  data->adapterAmperageA =
+      (LIKELY(!isnan(data->adapterPowerW) && !isnan(data->adapterVoltageV) &&
+              data->adapterVoltageV > 0.01f))
+          ? data->adapterPowerW / data->adapterVoltageV
+          : NAN;
 
   static const uint32_t temp_keys[] = {0x54423054, 0x54423154, 0x54423254,
                                        0x54423354, 0x54433042};
@@ -184,49 +203,46 @@ static bool smc_read_all_data(SMCBridgeData *data) {
   }
 
   uint16_t cycles;
-  if (smc_read_u16(0x42304354, &cycles)) {
-    data->batteryCycleCount = (int32_t)cycles;
-  } else {
-    data->batteryCycleCount = -1;
-  }
+  data->batteryCycleCount =
+      smc_read_u16(0x42304354, &cycles) ? (int32_t)cycles : -1;
 
   return true;
 }
 
 bool SMCBridgeReadAll(SMCBridgeData *data) {
-  if (!data)
+  if (UNLIKELY(!data))
     return false;
 
-  pthread_mutex_lock(&g_smc_cache.mutex);
+  smc_lock();
 
   uint64_t now = mach_time_ns();
-  if (g_smc_cache.initialized &&
-      (now - g_smc_cache.timestamp) < SMC_CACHE_TTL_NS) {
-    *data = g_smc_cache.data;
-    pthread_mutex_unlock(&g_smc_cache.mutex);
+  if (LIKELY(g_smc_cache.initialized &&
+             (now - g_smc_cache.timestamp) < SMC_CACHE_TTL_NS)) {
+    __builtin_memcpy(data, &g_smc_cache.data, sizeof(SMCBridgeData));
+    smc_unlock();
     return true;
   }
 
   bool success = smc_read_all_data(&g_smc_cache.data);
-  if (success) {
+  if (LIKELY(success)) {
     g_smc_cache.timestamp = now;
     g_smc_cache.initialized = true;
-    *data = g_smc_cache.data;
+    __builtin_memcpy(data, &g_smc_cache.data, sizeof(SMCBridgeData));
   }
 
-  pthread_mutex_unlock(&g_smc_cache.mutex);
+  smc_unlock();
   return success;
 }
 
 void SMCBridgeInvalidateCache(void) {
-  pthread_mutex_lock(&g_smc_cache.mutex);
+  smc_lock();
   g_smc_cache.initialized = false;
   g_smc_cache.timestamp = 0;
   if (g_smc_cache.connection != IO_OBJECT_NULL) {
     IOServiceClose(g_smc_cache.connection);
     g_smc_cache.connection = IO_OBJECT_NULL;
   }
-  pthread_mutex_unlock(&g_smc_cache.mutex);
+  smc_unlock();
 }
 
 __attribute__((destructor)) static void smc_cleanup(void) {

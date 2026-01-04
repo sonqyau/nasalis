@@ -21,16 +21,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Install SwiftFormat and SwiftLint
+      - name: Install swift-format and clang-format
         run: |
-          brew install swiftformat swiftlint
+          brew install swift-format clang-format
 
       - name: Linting
-        run: swiftlint --fix --format && swiftlint --strict
+        run: swift-format lint --recursive .
         continue-on-error: true
 
       - name: Formatting
-        run: swiftformat . && swiftformat . --lint
+        run: |
+          swift-format format --recursive --in-place .
+          clang-format -i nasalis/SMCBridge/SMCBridge.m nasalis/SMCBridge/include/SMCBridge.h
         continue-on-error: true
 
       - name: Get Swift version
